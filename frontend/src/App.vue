@@ -9,7 +9,7 @@ const question = ref('')
 <template>
   <div class="app-shell">
     <header class="topbar">
-      <a class="brand" href="/" aria-label="MiroFish home">MIROFISH</a>
+      <a class="brand" href="/" aria-label="Simulation Starter home">SIMULATION STARTER</a>
       <nav class="view-switcher" aria-label="Workspace view">
         <button
           v-for="view in views"

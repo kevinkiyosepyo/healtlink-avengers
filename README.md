@@ -1,4 +1,4 @@
-# MiroFish Starter
+# Simulation Starter
 
 A minimal Vue and Vite starter for the HealthLink Avengers project. It provides the initial simulation workspace layout and a clearly marked graph placeholder.
 
