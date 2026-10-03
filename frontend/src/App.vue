@@ -1,41 +1,13 @@
 <script setup>
-import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { ArrowUp, PanelLeft, Square } from "@lucide/vue";
-import SidebarPanel from "./components/SidebarPanel.vue";
-import BootScreen from "./components/fx/BootScreen.vue";
-import SampleRack from "./components/fx/SampleRack.vue";
-import StatusBadge from "./components/StatusBadge.vue";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogTitle,
-} from "./components/ui/dialog";
-import {
-  Command,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "./components/ui/command";
-import { Sheet, SheetContent, SheetDescription, SheetTitle } from "./components/ui/sheet";
-import { Input } from "./components/ui/input";
-import { prefersReducedMotion, useLenis } from "./composables/useMotion.js";
-import { useSemanticSearch } from "./composables/useSemanticSearch.js";
-import { ERROR_COPY, useResearch } from "./composables/useResearch.js";
-import AnalysisPanel from "./components/AnalysisPanel.vue";
-import { BLOCK_REASONS } from "./lib/guardrails.js";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import AppIcon from "./components/AppIcon.vue";
+import SimulationGraph from "./components/SimulationGraph.vue";
+import BottleneckTimeline from "./components/BottleneckTimeline.vue";
+import DocumentPreflight from "./components/DocumentPreflight.vue";
+import ResearcherLogin from "./components/ResearcherLogin.vue";
+import { useResearcherAccount } from "./composables/useResearcherAccount.js";
 import { useSimulationWorkspace } from "./composables/useSimulationWorkspace.js";
 import { PROMPT_LIMIT, TITLE_LIMIT } from "./lib/simulationWorkspace.js";
-
-// Vue Flow is only needed once the graph is opened.
-const SimulationGraph = defineAsyncComponent(() => import("./components/SimulationGraph.vue"));
-// Welcome effects (motion-v) and settings load on demand to keep first paint light.
-const BlurReveal = defineAsyncComponent(() => import("./components/ui/blur-reveal/BlurReveal.vue"));
-const FlickeringGrid = defineAsyncComponent(() => import("./components/ui/flickering-grid/FlickeringGrid.vue"));
-const SettingsDialog = defineAsyncComponent(() => import("./components/SettingsDialog.vue"));
-const settingsMounted = ref(false);
 
 const {
   sessions,
@@ -48,170 +20,184 @@ const {
   renameSession,
   deleteSession,
   startRun,
+  startOpenAIRun,
   stopRun,
 } = useSimulationWorkspace();
-
-const reducedMotion = prefersReducedMotion();
-const BOOT_KEY = "microfish:booted";
-function shouldBoot() {
-  if (reducedMotion) return false;
-  try {
-    return !window.sessionStorage.getItem(BOOT_KEY);
-  } catch {
-    return false;
-  }
+const { account, busy: accountBusy, error: accountError, ready: providerReady, google, chatgpt, disconnect, signout } = useResearcherAccount();
+const runMode = ref("demo");
+const loginPage = ref(null);
+function enterWorkspace(mode) {
+  runMode.value = mode;
+  navigate("simulations");
 }
-const booting = ref(shouldBoot());
-function finishBoot() {
-  booting.value = false;
-  try {
-    window.sessionStorage.setItem(BOOT_KEY, "1");
-  } catch {
-    /* Boot simply replays next time. */
+watch(providerReady, (ready) => {
+  if (ready) runMode.value = "openai";
+  else {
+    for (const session of sessions.value) {
+      if (session.runs.some(run => run.mode === "openai" && run.status === "running")) stopRun(session.id);
+    }
   }
+});
+const activeView = ref("Split");
+function pageFromHash() {
+  const hash = window.location.hash.split("?")[0];
+  return ({ "#/timeline": "timeline", "#/preflight": "preflight", "#/login": "login", "#/simulations": "simulations" })[hash] || "login";
 }
-
-const views = ["chat", "split", "graph"];
-const activeView = ref("chat");
+const currentPage = ref(pageFromHash());
+const timelinePage = ref(null);
+const preflightPage = ref(null);
+function syncPage() {
+  currentPage.value = pageFromHash();
+  sidebarOpen.value = false;
+  menuId.value = null;
+}
+function navigate(page) {
+  window.location.hash = ({ timeline: "/timeline", preflight: "/preflight", login: "/login" })[page] || "/simulations";
+  currentPage.value = page;
+  sidebarOpen.value = false;
+  menuId.value = null;
+}
+onMounted(() => window.addEventListener("hashchange", syncPage));
+onUnmounted(() => window.removeEventListener("hashchange", syncPage));
+watch(currentPage, async (page) => {
+  await nextTick();
+  if (page === "timeline") timelinePage.value?.focusHeading();
+  else if (page === "preflight") preflightPage.value?.focusHeading();
+  else if (page === "login") loginPage.value?.focusHeading();
+  else composer.value?.focus();
+});
 const search = ref("");
 const sidebarOpen = ref(false);
-const paletteOpen = ref(false);
+const sidebar = ref(null);
+const sidebarToggle = ref(null);
+const isMobile = ref(false);
+let mobileQuery;
+function updateMobileLayout(event) {
+  isMobile.value = event.matches;
+  if (!event.matches) sidebarOpen.value = false;
+}
+onMounted(() => {
+  mobileQuery = window.matchMedia("(max-width: 760px)");
+  updateMobileLayout(mobileQuery);
+  mobileQuery.addEventListener("change", updateMobileLayout);
+});
+onUnmounted(() =>
+  mobileQuery?.removeEventListener("change", updateMobileLayout),
+);
+watch(sidebarOpen, async (open) => {
+  const focusWasInSidebar = sidebar.value?.contains(document.activeElement);
+  await nextTick();
+  if (open && isMobile.value) {
+    // Wait for the drawer's visibility style to apply before moving focus.
+    await new Promise(requestAnimationFrame);
+    if (sidebarOpen.value)
+      sidebar.value?.querySelector(".new-chat-button")?.focus();
+  } else if (
+    isMobile.value &&
+    focusWasInSidebar &&
+    (document.activeElement === document.body ||
+      sidebar.value?.contains(document.activeElement))
+  ) {
+    sidebarToggle.value?.focus();
+  }
+});
+function trapSidebarFocus(event) {
+  if (!sidebarOpen.value || !isMobile.value) return;
+  const controls = [
+    ...sidebar.value.querySelectorAll("button:not(:disabled), input, a[href]"),
+  ].filter((element) => element.getClientRects().length);
+  const first = controls[0];
+  const last = controls.at(-1);
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last?.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first?.focus();
+  }
+}
+const menuId = ref(null);
 const composer = ref(null);
 const messageList = ref(null);
+const actionDialog = ref(null);
+const dialogAction = ref(null);
+const dialogSession = ref(null);
+const editedTitle = ref("");
+const renameInput = ref(null);
+let dialogFocusReturn;
 const submitError = ref("");
-const { scrollToBottom } = useLenis(messageList);
-
-const isMac =
-  typeof navigator !== "undefined" && /mac|iphone|ipad/i.test(navigator.platform);
+const views = [
+  { name: "Chat", icon: "chat" },
+  { name: "Split", icon: "split" },
+  { name: "Graph", icon: "graph" },
+];
 const starters = [
   {
-    title: "explore a community",
-    prompt: "How might a community respond to a new neighborhood health clinic?",
+    icon: "people",
+    title: "Explore a community",
+    prompt:
+      "How might a community respond to a new neighborhood health clinic?",
   },
   {
-    title: "compare two approaches",
-    prompt: "How might appointment reminders by text compare with reminders by phone?",
+    icon: "branch",
+    title: "Compare two approaches",
+    prompt:
+      "How might appointment reminders by text compare with reminders by phone?",
   },
   {
-    title: "test a what-if",
-    prompt: "What might change if a clinic offered evening and weekend appointments?",
+    icon: "spark",
+    title: "Test a what-if",
+    prompt:
+      "What might change if a clinic offered evening and weekend appointments?",
   },
 ];
-
-const sortedSessions = computed(() =>
-  [...sessions.value].sort((a, b) => b.updatedAt - a.updatedAt),
-);
-function keywordMatch(session, query) {
-  return `${session.title} ${session.messages
-    .filter((message) => message.role === "user")
-    .map((message) => message.content)
-    .join(" ")}`
-    .toLowerCase()
-    .includes(query);
-}
-
-// Semantic search: an in-browser vector index (see useSemanticSearch). Keyword
-// matches stay instant; semantic matches are appended once the model is ready.
-const semantic = useSemanticSearch(sessions);
-function useRankedSessions(term) {
-  const hits = ref([]);
-  let token = 0;
-  let timer;
-  watch([term, semantic.status, semantic.indexSize], () => {
-    clearTimeout(timer);
-    const current = ++token;
-    if (term.value.trim().length < 3) {
-      hits.value = [];
-      return;
-    }
-    timer = setTimeout(async () => {
-      const result = await semantic.query(term.value);
-      if (current === token) hits.value = result;
-    }, 150);
-  });
-  const ranked = computed(() => {
-    const query = term.value.trim().toLowerCase();
-    if (!query) return sortedSessions.value;
-    const keyword = sortedSessions.value.filter((session) => keywordMatch(session, query));
-    const seen = new Set(keyword.map((session) => session.id));
-    const similar = hits.value
-      .filter((hit) => !seen.has(hit.sessionId))
-      .map((hit) => sessions.value.find((session) => session.id === hit.sessionId))
-      .filter(Boolean);
-    return [...keyword, ...similar];
-  });
-  const similarIds = computed(() => {
-    const query = term.value.trim().toLowerCase();
-    return new Set(
-      hits.value
-        .map((hit) => hit.sessionId)
-        .filter((id) => {
-          const session = sessions.value.find((item) => item.id === id);
-          return session && !keywordMatch(session, query);
-        }),
-    );
-  });
-  return { ranked, similarIds };
-}
-const { ranked: filteredSessions, similarIds } = useRankedSessions(search);
-const paletteTerm = ref("");
-const { ranked: paletteSessions, similarIds: paletteSimilarIds } = useRankedSessions(paletteTerm);
-watch(paletteOpen, (open) => {
-  if (!open) paletteTerm.value = "";
-});
-const semanticLabel = computed(
-  () =>
-    ({
-      idle: "keyword search",
-      loading: `loading semantic index${semantic.progress.value ? ` · ${semantic.progress.value}%` : ""}`,
-      ready: `semantic · ${semantic.indexSize.value} vectors`,
-      unavailable: "keyword search · semantic offline",
-    })[semantic.status.value],
+const filteredSessions = computed(() =>
+  [...sessions.value]
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .filter((session) =>
+      `${session.title} ${session.messages
+        .filter((message) => message.role === "user")
+        .map((message) => message.content)
+        .join(" ")}`
+        .toLowerCase()
+        .includes(search.value.trim().toLowerCase()),
+    ),
 );
 const latestRun = computed(() => activeSession.value?.runs.at(-1) ?? null);
 const isRunning = computed(() => latestRun.value?.status === "running");
-const checking = ref(false);
 const canSubmit = computed(
-  () => Boolean(activeSession.value?.draft.trim()) && !isRunning.value && !checking.value,
+  () => Boolean(activeSession.value?.draft.trim()) && !isRunning.value,
 );
-const research = useResearch(sessions);
-const settingsOpen = ref(false);
-watch(settingsOpen, (open) => {
-  if (open) settingsMounted.value = true;
-});
-const latestRecord = computed(() => (latestRun.value ? research.records[latestRun.value.id] ?? null : null));
-const latestStances = computed(() => latestRecord.value?.analysis?.stances ?? null);
-
+function sessionStatus(session) {
+  return session.runs.at(-1)?.status ?? "draft";
+}
+function statusLabel(status) {
+  return (
+    {
+      running: "Running",
+      completed: "Completed",
+      stopped: "Stopped",
+      failed: "Failed",
+      draft: "Draft",
+    }[status] || "Draft"
+  );
+}
 function runForMessage(message) {
   return activeSession.value?.runs.find((run) => run.id === message.runId);
 }
-function runIndex(run) {
-  return String(activeSession.value.runs.indexOf(run) + 1).padStart(2, "0");
-}
-function formatDuration(ms) {
-  const seconds = Math.max(0, Math.round(ms / 1000));
-  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
-}
-// Vercel-style metadata: progress while running, then the elapsed duration.
-function runMeta(run) {
-  const elapsed = formatDuration(((run.progress || 0) / 100) * (run.durationMs || 0));
-  if (run.status === "running") return [`${Math.round(run.progress)}%`, elapsed];
-  if (run.status === "stopped") return [`at ${Math.round(run.progress)}%`, elapsed];
-  return [elapsed, `${run.agentCount} agents`];
-}
-
 function selectChat(id) {
+  navigate("simulations");
   selectSession(id);
+  menuId.value = null;
   sidebarOpen.value = false;
-  paletteOpen.value = false;
   submitError.value = "";
 }
 async function newChat() {
-  paletteOpen.value = false;
   if (!createSession()) return;
+  navigate("simulations");
   search.value = "";
   sidebarOpen.value = false;
-  activeView.value = "chat";
+  activeView.value = "Split";
   submitError.value = "";
   await nextTick();
   composer.value?.focus();
@@ -221,90 +207,47 @@ async function useStarter(prompt) {
   await nextTick();
   composer.value?.focus();
 }
-// Every prompt is screened before a run starts: local rules, then (OpenAI
-// mode) moderation; the model's own scope check runs with the analysis.
-async function submitRun() {
+function submitRun() {
   if (!canSubmit.value) return;
-  const session = activeSession.value;
-  const prompt = session.draft;
-  checking.value = true;
-  submitError.value = "";
-  const result = await research.check(prompt);
-  checking.value = false;
-  if (result.needsKey) {
-    submitError.value = "add and test an openai key in settings, or switch to demo mode.";
-    settingsOpen.value = true;
+  if (runMode.value === "openai" && !providerReady.value) {
+    navigate("login");
     return;
   }
-  if (result.error) {
-    submitError.value = ERROR_COPY[result.error] ?? ERROR_COPY.unavailable;
-    return;
-  }
-  if (result.blocked) {
-    submitError.value = BLOCK_REASONS[result.blocked] ?? BLOCK_REASONS.unsafe;
-    return;
-  }
-  const run = startRun(session.id, prompt);
-  if (!run) {
-    submitError.value = "this run could not start — check the workspace notice and try again.";
-    return;
-  }
-  const record = await research.analyze({ run, session, guardrails: result.guardrails });
-  // In OpenAI mode the analysis is the result; end the playback so the
-  // researcher can ask a follow-up immediately.
-  const live = session.runs.find((item) => item.id === run.id);
-  if (record?.mode === "openai" && live?.status === "running") stopRun(session.id);
-  if (record?.analysis?.inScope === false && activeId.value === session.id) {
-    submitError.value = BLOCK_REASONS[record.analysis.reason] ?? BLOCK_REASONS.off_topic;
-  }
+  const run = (runMode.value === "openai" ? startOpenAIRun : startRun)(activeId.value, activeSession.value.draft);
+  submitError.value = run
+    ? ""
+    : "This run could not start. Check the workspace notice and try again.";
 }
-// The graph and sidebar follow the analysis (not the playback) for OpenAI runs.
-function effectiveStatus(run) {
-  if (!run) return "draft";
-  const record = research.records[run.id];
-  if (record?.mode !== "openai") return run.status;
-  return { analyzing: "running", ready: "completed", blocked: "error", error: "error" }[research.status[run.id]] ?? run.status;
-}
-const graphRun = computed(() => {
-  const run = latestRun.value;
-  if (!run || research.records[run.id]?.mode !== "openai") return run;
-  const status = effectiveStatus(run);
-  return { ...run, status, progress: status === "completed" ? 100 : run.progress, stage: research.status[run.id] === "ready" ? "analysis ready" : run.stage };
-});
-watch(
-  () => latestRun.value && research.status[latestRun.value.id],
-  async () => {
-    await nextTick();
-    scrollToBottom();
-  },
-);
-function retryAnalysis(run) {
-  research.retry(run, activeSession.value);
-}
-watch(
-  () => activeSession.value?.draft,
-  () => {
-    if (submitError.value && !checking.value) submitError.value = "";
-  },
-);
 function composerKeydown(event) {
   if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
     event.preventDefault();
     submitRun();
   }
 }
-
-// Rename / delete dialog
-const dialogOpen = ref(false);
-const dialogAction = ref("rename");
-const dialogSession = ref(null);
-const editedTitle = ref("");
-function openAction(action, session) {
+async function openAction(action, session) {
+  dialogFocusReturn = document.activeElement
+    ?.closest(".conversation-row")
+    ?.querySelector(".conversation-menu-button");
   dialogAction.value = action;
   dialogSession.value = session;
   editedTitle.value = session.title;
-  sidebarOpen.value = false;
-  dialogOpen.value = true;
+  menuId.value = null;
+  actionDialog.value.showModal();
+  await nextTick();
+  if (action === "rename") renameInput.value?.select();
+}
+async function restoreDialogFocus() {
+  await nextTick();
+  if (
+    dialogFocusReturn?.isConnected &&
+    dialogFocusReturn.getClientRects().length
+  ) {
+    dialogFocusReturn.focus();
+  } else if (sidebarOpen.value) {
+    sidebar.value?.querySelector(".new-chat-button")?.focus();
+  } else {
+    composer.value?.focus();
+  }
 }
 function confirmAction() {
   if (dialogAction.value === "rename") {
@@ -313,463 +256,527 @@ function confirmAction() {
   } else {
     deleteSession(dialogSession.value.id);
   }
-  dialogOpen.value = false;
+  actionDialog.value.close();
 }
-const dialogSessionRunning = computed(
-  () => dialogSession.value?.runs.at(-1)?.status === "running",
-);
-
-// Split view divider
-const workspaceEl = ref(null);
-const splitRatio = ref(45);
-const workspaceStyle = computed(() =>
-  activeView.value === "split"
-    ? {
-        gridTemplateColumns: `minmax(0, ${splitRatio.value}fr) 8px minmax(0, ${100 - splitRatio.value}fr)`,
-      }
-    : null,
-);
-function clampRatio(value) {
-  return Math.min(70, Math.max(30, value));
-}
-function startResize(event) {
-  const rect = workspaceEl.value.getBoundingClientRect();
-  const move = (moveEvent) => {
-    splitRatio.value = clampRatio(((moveEvent.clientX - rect.left) / rect.width) * 100);
-  };
-  const stop = () => {
-    window.removeEventListener("pointermove", move);
-    window.removeEventListener("pointerup", stop);
-  };
-  event.preventDefault();
-  window.addEventListener("pointermove", move);
-  window.addEventListener("pointerup", stop);
-}
-function resizeKeydown(event) {
-  const step = { ArrowLeft: -2, ArrowRight: 2 }[event.key];
-  if (!step) return;
-  event.preventDefault();
-  splitRatio.value = clampRatio(splitRatio.value + step);
-}
-
-function globalKeydown(event) {
-  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-    event.preventDefault();
-    paletteOpen.value = !paletteOpen.value;
-  }
-}
-onMounted(() => {
-  window.addEventListener("keydown", globalKeydown);
-  // Load the embedding model after first paint so it never competes with the UI.
-  const startIndex = () => semantic.start();
-  if ("requestIdleCallback" in window) window.requestIdleCallback(startIndex, { timeout: 4000 });
-  else setTimeout(startIndex, 1500);
-});
-onUnmounted(() => window.removeEventListener("keydown", globalKeydown));
-
 watch(
-  () => [activeId.value, activeSession.value?.messages.length, activeView.value],
+  () => [
+    activeId.value,
+    activeSession.value?.messages.length,
+    activeView.value,
+  ],
   async () => {
     await nextTick();
-    scrollToBottom();
+    if (messageList.value)
+      messageList.value.scrollTop = messageList.value.scrollHeight;
   },
 );
 </script>
 
 <template>
-  <Transition name="boot">
-    <BootScreen v-if="booting" @done="finishBoot" />
-  </Transition>
-
-  <div class="app-shell">
-    <SidebarPanel
-      v-model:search="search"
-      :sessions="sessions"
-      :filtered-sessions="filteredSessions"
-      :status-of="(session) => effectiveStatus(session.runs.at(-1))"
-      :similar-ids="similarIds"
-      :search-status="semanticLabel"
-      :active-id="activeId"
-      :running-count="runningCount"
-      @new="newChat"
-      @select="selectChat"
-      @rename="openAction('rename', $event)"
-      @delete="openAction('delete', $event)"
-      @palette="paletteOpen = true"
-      @settings="settingsOpen = true"
-    />
-
-    <Sheet v-model:open="sidebarOpen">
-      <SheetContent
-        side="left"
-        class="w-[288px] max-w-[85vw] gap-0 border-0 p-0 [&>button.absolute]:hidden"
-      >
-        <SheetTitle class="sr-only">Simulation conversations</SheetTitle>
-        <SheetDescription class="sr-only">Switch, rename, or delete simulations.</SheetDescription>
-        <SidebarPanel
-          v-model:search="search"
-          closable
-          :sessions="sessions"
-          :filtered-sessions="filteredSessions"
-          :status-of="(session) => effectiveStatus(session.runs.at(-1))"
-          :similar-ids="similarIds"
-          :search-status="semanticLabel"
-          :active-id="activeId"
-          :running-count="runningCount"
-          @new="newChat"
-          @select="selectChat"
-          @rename="openAction('rename', $event)"
-          @delete="openAction('delete', $event)"
-          @palette="
-            sidebarOpen = false;
-            paletteOpen = true;
-          "
-          @settings="
-            sidebarOpen = false;
-            settingsOpen = true;
-          "
-          @close="sidebarOpen = false"
-        />
-      </SheetContent>
-    </Sheet>
-
-    <div class="main-shell">
-      <header class="topbar">
-        <div class="breadcrumb mono">
+  <ResearcherLogin
+    v-if="currentPage === 'login'"
+    ref="loginPage"
+    :account="account"
+    :busy="accountBusy"
+    :error="accountError"
+    @google="google"
+    @chatgpt="chatgpt"
+    @disconnect="disconnect"
+    @signout="signout"
+    @continue="enterWorkspace($event)"
+    @demo="enterWorkspace('demo')"
+  />
+  <div
+    v-else
+    class="app-shell"
+    @click="menuId = null"
+    @keydown.esc="
+      sidebarOpen = false;
+      menuId = null;
+    "
+  >
+    <button
+      v-if="sidebarOpen"
+      class="sidebar-scrim"
+      aria-label="Close sidebar"
+      @click="sidebarOpen = false"
+    ></button>
+    <aside
+      ref="sidebar"
+      id="simulation-sidebar"
+      class="sidebar"
+      :class="{ 'is-open': sidebarOpen }"
+      aria-label="Simulation conversations"
+      :role="sidebarOpen && isMobile ? 'dialog' : undefined"
+      :aria-modal="sidebarOpen && isMobile ? true : undefined"
+      @keydown.tab="trapSidebarFocus"
+    >
+      <div class="sidebar-brand">
+        <span class="brand-symbol"><AppIcon name="fish" :size="28" /></span
+        ><span class="brand">microfish<span class="brand-period">.</span></span
+        ><button
+          class="icon-button mobile-close"
+          aria-label="Close sidebar"
+          @click="sidebarOpen = false"
+        >
+          <AppIcon name="close" />
+        </button>
+      </div>
+      <button class="new-chat-button" @click="newChat">
+        <AppIcon name="plus" :size="18" /> New simulation
+        <span class="new-chat-hint">↗</span>
+      </button>
+      <div class="sidebar-section-label workspace-nav-label">WORKSPACE</div>
+      <nav class="workspace-navigation" aria-label="Workspace pages">
+        <button
+          class="workspace-nav-button"
+          :class="{ active: currentPage === 'timeline' }"
+          :aria-current="currentPage === 'timeline' ? 'page' : undefined"
+          @click="navigate('timeline')"
+        >
+          <AppIcon name="timeline" :size="18" />
+          <span>Bottleneck timeline</span>
+          <AppIcon class="workspace-nav-arrow" name="arrow-up-right" :size="15" />
+        </button>
+        <button
+          class="workspace-nav-button"
+          :class="{ active: currentPage === 'preflight' }"
+          :aria-current="currentPage === 'preflight' ? 'page' : undefined"
+          @click="navigate('preflight')"
+        >
+          <AppIcon name="document-check" :size="18" />
+          <span>Document preflight</span>
+          <AppIcon class="workspace-nav-arrow" name="arrow-up-right" :size="15" />
+        </button>
+        <a class="workspace-nav-button research-workspace-link" href="/researcher.html">
+          <AppIcon name="branch" :size="18" />
+          <span>Research workspace</span>
+          <AppIcon class="workspace-nav-arrow" name="arrow-up-right" :size="15" />
+        </a>
+      </nav>
+      <label class="search-box"
+        ><AppIcon name="search" :size="16" /><input
+          v-model="search"
+          type="search"
+          placeholder="Search simulations"
+          aria-label="Search simulations"
+      /></label>
+      <div class="sidebar-section-label">
+        <span>YOUR SIMULATIONS</span><span>{{ sessions.length }}</span>
+      </div>
+      <nav class="conversation-list" aria-label="Saved simulations">
+        <p v-if="!filteredSessions.length" class="no-results">
+          No simulations found.<br />Try another search.
+        </p>
+        <div
+          v-for="session in filteredSessions"
+          :key="session.id"
+          class="conversation-row"
+          :class="{
+            selected: currentPage === 'simulations' && activeId === session.id,
+            'has-menu': menuId === session.id,
+          }"
+        >
           <button
-            class="icon-btn mobile-only"
-            aria-label="Open simulation sidebar"
-            :aria-expanded="sidebarOpen"
-            @click="sidebarOpen = true"
+            class="conversation-button"
+            :aria-current="currentPage === 'simulations' && activeId === session.id ? 'page' : undefined"
+            @click="selectChat(session.id)"
           >
-            <PanelLeft :size="16" />
+            <AppIcon name="chat" :size="17" /><span class="conversation-text"
+              ><span class="conversation-title">{{ session.title }}</span
+              ><span class="conversation-status"
+                ><span class="status-dot" :class="sessionStatus(session)"></span
+                >{{ statusLabel(sessionStatus(session))
+                }}<span v-if="session.runs.length" class="run-count"
+                  >· {{ session.runs.length }}
+                  {{ session.runs.length === 1 ? "run" : "runs" }}</span
+                ></span
+              ></span
+            >
           </button>
-          <span>workspace</span><span>/</span>
-          <span class="current">{{ activeSession?.title }}</span>
+          <button
+            class="icon-button conversation-menu-button"
+            :aria-label="`Options for ${session.title}`"
+            :aria-expanded="menuId === session.id"
+            @click.stop="menuId = menuId === session.id ? null : session.id"
+          >
+            <AppIcon name="more" :size="17" />
+          </button>
+          <div
+            v-if="menuId === session.id"
+            class="conversation-menu"
+            @click.stop
+          >
+            <button @click="openAction('rename', session)">
+              <AppIcon name="edit" :size="16" /> Rename</button
+            ><button class="danger-text" @click="openAction('delete', session)">
+              <AppIcon name="trash" :size="16" /> Delete
+            </button>
+          </div>
         </div>
-        <div class="topbar-right">
-          <StatusBadge
-            v-if="runningCount"
-            role="status"
-            variant="chip"
-            status="running"
-            :label="`${runningCount} running`"
-          />
-          <button class="mode-chip" aria-label="Model and data settings" @click="settingsOpen = true">
-            <StatusBadge
-              variant="chip"
-              size="sm"
-              :status="research.ready.value ? 'completed' : 'draft'"
-              :label="research.modeLabel.value"
-            />
-          </button>
-          <nav class="segmented mono" aria-label="Workspace view">
+      </nav>
+      <div class="sidebar-bottom">
+        <div v-if="runningCount" class="parallel-notice">
+          <span class="parallel-icon"
+            ><AppIcon name="layers" :size="18"
+          /></span>
+          <div>
+            <strong>{{
+              runningCount
+                ? `${runningCount} ${runningCount === 1 ? "simulation" : "simulations"} running`
+                : "Room for every what-if"
+            }}</strong>
+            <p>
+              {{
+                runningCount
+                  ? "Keep exploring. Your other chats keep running."
+                  : "Start a new chat to run another scenario in parallel."
+              }}
+            </p>
+          </div>
+        </div>
+        <button class="workspace-identity account-button" @click="navigate('login')">
+          <span class="workspace-avatar">{{ account.user?.name?.charAt(0) || 'M' }}</span>
+          <div>
+            <strong>{{ account.user?.name || 'Researcher sign-in' }}</strong><span>{{ account.user ? 'Account & AI connection' : 'Google or ChatGPT' }}</span>
+          </div>
+          <AppIcon name="lock" :size="15" />
+        </button>
+      </div>
+    </aside>
+    <div class="main-shell" :inert="sidebarOpen && isMobile">
+      <header class="topbar">
+        <div class="workspace-breadcrumb">
+          <button
+            ref="sidebarToggle"
+            class="icon-button sidebar-toggle"
+            aria-label="Open simulation sidebar"
+            aria-controls="simulation-sidebar"
+            :aria-expanded="sidebarOpen"
+            @click="sidebarOpen = !sidebarOpen"
+          >
+            <AppIcon name="sidebar" /></button
+          ><span class="breadcrumb-parent">Workspace</span
+          ><span class="breadcrumb-divider">/</span
+          ><span class="current-title">{{ currentPage === 'timeline' ? 'Bottleneck timeline' : currentPage === 'preflight' ? 'Document preflight' : activeSession?.title }}</span>
+        </div>
+        <div class="header-status">
+          <span v-if="runningCount" class="running-badge" role="status"
+            ><span class="status-dot running"></span
+            >{{ runningCount }} running</span
+          ><button class="demo-badge account-status" @click="navigate('login')"><span></span>{{ runMode === 'openai' ? (providerReady ? 'OpenAI connected' : 'Reconnect OpenAI') : 'Demo mode' }}</button>
+        </div>
+      </header>
+      <BottleneckTimeline ref="timelinePage" v-show="currentPage === 'timeline'" />
+      <DocumentPreflight ref="preflightPage" v-show="currentPage === 'preflight'" />
+      <main v-if="activeSession" v-show="currentPage === 'simulations'" class="workspace">
+        <div class="workspace-toolbar">
+          <div class="workspace-heading">
+            <AppIcon name="layers" :size="18" /><span
+              >Simulation workspace</span
+            >
+          </div>
+          <nav class="view-switcher" aria-label="Workspace view">
             <button
               v-for="view in views"
-              :key="view"
-              :class="{ active: activeView === view }"
-              :aria-pressed="activeView === view"
-              @click="activeView = view"
+              :key="view.name"
+              :class="{ active: activeView === view.name }"
+              :aria-pressed="activeView === view.name"
+              @click="activeView = view.name"
             >
-              {{ view }}
+              <AppIcon :name="view.icon" :size="15" /><span>{{
+                view.name
+              }}</span>
             </button>
           </nav>
         </div>
-      </header>
-
-      <div v-if="storageWarning" class="notice" role="alert">
-        <span class="mono">note —</span><span>{{ storageWarning }}</span>
-      </div>
-
-      <main
-        v-if="activeSession"
-        ref="workspaceEl"
-        class="workspace"
-        :class="`view-${activeView}`"
-        :style="workspaceStyle"
-      >
-        <section class="chat-panel" aria-label="Simulation chat">
-          <div ref="messageList" class="message-scroll">
-            <div v-if="!activeSession.messages.length" class="welcome">
-              <FlickeringGrid
-                v-if="!reducedMotion"
-                class="welcome-bg"
-                color="#cc785c"
-                :square-size="3"
-                :grid-gap="9"
-                :flicker-chance="0.12"
-                :max-opacity="0.16"
-              />
-              <div class="column">
-                <BlurReveal :key="activeId" :delay="0.12" :duration="0.6" blur="8px" :y-offset="10">
-                  <p class="eyebrow mono">a little curiosity — a world of possibilities</p>
-                  <h1>one question.<br />many possible futures.</h1>
-                  <p class="welcome-copy">
-                    give each what-if its own chat. explore a scenario, then start another alongside
-                    it — runs keep going in parallel.
-                  </p>
-                  <div class="starters">
-                    <button
-                      v-for="(starter, index) in starters"
-                      :key="starter.title"
-                      class="starter"
-                      @click="useStarter(starter.prompt)"
-                    >
-                      <span class="glyph-link">{{ starter.title }}</span>
-                      <span class="mono">0{{ index + 1 }}</span>
-                      <span class="starter-prompt">{{ starter.prompt }}</span>
-                    </button>
-                  </div>
-                  <p class="welcome-note mono">separate conversations — independent simulations</p>
-                </BlurReveal>
+        <div v-if="storageWarning" class="storage-warning" role="alert">
+          <AppIcon name="info" :size="17" />{{ storageWarning }}
+        </div>
+        <div
+          class="workspace-content"
+          :class="`view-${activeView.toLowerCase()}`"
+        >
+          <section
+            v-show="activeView !== 'Graph'"
+            class="chat-panel"
+            aria-label="Simulation chat"
+          >
+            <div ref="messageList" class="message-scroll">
+              <div v-if="!activeSession.messages.length" class="welcome">
+                <div class="welcome-emblem">
+                  <AppIcon name="fish" :size="38" />
+                </div>
+                <h1>Explore your next what-if.</h1>
+                <p class="welcome-copy">
+                  Compare scenarios, follow the connections, and uncover questions
+                  to explore before your next study.
+                </p>
+                <div class="starter-grid">
+                  <button
+                    v-for="starter in starters"
+                    :key="starter.title"
+                    class="starter-card"
+                    @click="useStarter(starter.prompt)"
+                  >
+                    <AppIcon :name="starter.icon" :size="20" /><strong>{{
+                      starter.title
+                    }}</strong
+                    ><span>{{ starter.prompt }}</span
+                    ><AppIcon
+                      class="starter-arrow"
+                      name="arrow-up-right"
+                      :size="16"
+                    />
+                  </button>
+                </div>
               </div>
-            </div>
-
-            <div v-else class="column messages">
-              <div class="date-label mono">
-                {{
-                  new Date(activeSession.createdAt)
-                    .toLocaleDateString(undefined, { month: "long", day: "numeric" })
-                    .toLowerCase()
-                }}
-              </div>
-              <TransitionGroup name="msg">
+              <div v-else class="messages">
+                <div class="conversation-date">
+                  {{
+                    new Date(activeSession.createdAt).toLocaleDateString(
+                      undefined,
+                      { month: "long", day: "numeric" },
+                    )
+                  }}
+                </div>
                 <article
                   v-for="message in activeSession.messages"
                   :key="message.id"
                   class="message"
                   :class="`message-${message.role}`"
                 >
-                  <div class="message-label mono">
-                    <template v-if="message.role === 'user'">you</template>
-                    <template v-else-if="runForMessage(message)"
-                      >microfish — run {{ runIndex(runForMessage(message)) }} —
-                      {{ research.records[runForMessage(message).id]?.mode === "openai"
-                        ? `11 stakeholders — ${research.records[runForMessage(message).id].provenance?.model || research.records[runForMessage(message).id].provenance?.requestedModel || "openai"}`
-                        : `${runForMessage(message).agentCount} agents — demo` }}</template
-                    >
-                    <template v-else>microfish — demo</template>
-                  </div>
-                  <p
-                    v-if="!(message.role === 'assistant' && research.records[message.runId]?.mode === 'openai')"
-                    class="message-text"
-                  >
-                    {{ message.content }}
-                  </p>
-                  <p v-else class="message-text">
-                    stakeholder analysis for this scenario — saved as a research record with full provenance.
-                  </p>
                   <div
-                    v-if="
-                      message.role === 'assistant' &&
-                      runForMessage(message) &&
-                      !(research.records[runForMessage(message).id]?.mode === 'openai' && research.status[runForMessage(message).id] !== 'analyzing')
-                    "
-                    class="run-block"
-                    :class="`run-${runForMessage(message).status}`"
+                    v-if="message.role === 'assistant'"
+                    class="assistant-avatar"
                   >
-                    <div class="run-head">
-                      <StatusBadge
-                        :status="runForMessage(message).status"
-                        :meta="runMeta(runForMessage(message))"
-                      />
-                      <span class="pct mono">run {{ runIndex(runForMessage(message)) }}</span>
-                    </div>
-                    <div
-                      class="progress"
-                      role="progressbar"
-                      :aria-label="`Demo progress for ${runForMessage(message).prompt}`"
-                      :aria-valuenow="Math.round(runForMessage(message).progress)"
-                      aria-valuemin="0"
-                      aria-valuemax="100"
-                    >
-                      <div :style="{ width: `${runForMessage(message).progress}%` }"></div>
-                    </div>
-                    <SampleRack
-                      v-if="runForMessage(message).status === 'running' || research.status[runForMessage(message).id] === 'analyzing'"
-                      :progress="runForMessage(message).progress"
-                    />
-                    <div class="run-foot mono">
-                      <span>{{ runForMessage(message).stage.toLowerCase() }}</span>
-                      <button
-                        v-if="runForMessage(message).id === latestRun?.id && activeView === 'chat'"
-                        class="glyph-link"
-                        @click="activeView = 'split'"
-                      >
-                        open in graph
-                      </button>
-                    </div>
+                    <AppIcon name="fish" :size="22" />
                   </div>
-                  <AnalysisPanel
-                    v-if="message.role === 'assistant' && runForMessage(message)"
-                    :record="research.records[runForMessage(message).id] ?? null"
-                    :status="research.status[runForMessage(message).id] ?? ''"
-                    :latest="runForMessage(message).id === latestRun?.id"
-                    @retry="retryAnalysis(runForMessage(message))"
-                    @export="research.exportRun(runForMessage(message).id, $event)"
-                    @graph="activeView = 'split'"
-                  />
+                  <div class="message-body">
+                    <div
+                      v-if="message.role === 'assistant'"
+                      class="assistant-name"
+                    >
+                      Microfish <span>{{ runForMessage(message)?.mode === 'openai' ? 'OPENAI' : 'DEMO' }}</span>
+                    </div>
+                    <p class="message-text">{{ message.content }}</p>
+                    <template
+                      v-if="
+                        message.role === 'assistant' && runForMessage(message)
+                      "
+                      ><div
+                        class="run-card"
+                        :class="`run-${runForMessage(message).status}`"
+                      >
+                        <div class="run-card-heading">
+                          <span class="run-symbol"
+                            ><AppIcon
+                              :name="
+                                runForMessage(message).status === 'completed'
+                                  ? 'check'
+                                  : runForMessage(message).status === 'stopped'
+                                    ? 'stop'
+                                    : 'graph'
+                              "
+                              :size="19"
+                          /></span>
+                          <div>
+                            <strong>{{
+                              runForMessage(message).status === "running"
+                                ? "Exploring your scenario"
+                                : runForMessage(message).status === "completed"
+                                  ? (runForMessage(message).mode === 'openai' ? 'AI exploration complete' : 'Demo run complete')
+                                  : runForMessage(message).status === 'failed' ? 'Run could not complete' : 'Run stopped'
+                            }}</strong
+                            ><span
+                              >{{ runForMessage(message).mode === 'openai' ? 'OpenAI ·' : 'Local demo ·' }}
+                              {{ runForMessage(message).agentCount }}
+                              {{ runForMessage(message).mode === 'openai' ? 'research perspectives' : 'illustrative agents' }}</span
+                            >
+                          </div>
+                          <span class="run-percentage"
+                            v-if="runForMessage(message).mode !== 'openai' || runForMessage(message).status === 'completed'"
+                            >{{
+                              Math.round(runForMessage(message).progress)
+                            }}%</span
+                          >
+                        </div>
+                        <div
+                          v-if="runForMessage(message).mode !== 'openai' || runForMessage(message).status === 'completed'"
+                          class="progress-track"
+                          role="progressbar"
+                          :aria-label="`Run progress for ${runForMessage(message).prompt}`"
+                          :aria-valuenow="
+                            Math.round(runForMessage(message).progress)
+                          "
+                          aria-valuemin="0"
+                          aria-valuemax="100"
+                        >
+                          <div
+                            :style="{
+                              width: `${runForMessage(message).progress}%`,
+                            }"
+                          ></div>
+                        </div>
+                        <div class="run-card-footer">
+                          <span>{{ runForMessage(message).stage }}</span
+                          ><button
+                            v-if="runForMessage(message).id === latestRun?.id && runForMessage(message).mode !== 'openai'"
+                            @click="activeView = 'Split'"
+                          >
+                            View graph
+                            <AppIcon name="arrow-up-right" :size="13" />
+                          </button>
+                        </div></div
+                    ></template>
+                  </div>
                 </article>
-              </TransitionGroup>
-            </div>
-          </div>
-
-          <div class="column composer-area">
-            <div v-if="isRunning" class="background-hint mono" role="status">
-              <span class="dot running"></span>this demo keeps running when you switch chats
-            </div>
-            <form class="composer" @submit.prevent="submitRun">
-              <label class="sr-only" for="simulation-prompt">Simulation question</label>
-              <textarea
-                id="simulation-prompt"
-                ref="composer"
-                v-model="activeSession.draft"
-                :maxlength="PROMPT_LIMIT"
-                rows="2"
-                :placeholder="
-                  isRunning
-                    ? 'draft your next question while this demo runs…'
-                    : activeSession.messages.length
-                      ? 'ask a follow-up or explore another possibility…'
-                      : 'what would you like to simulate?'
-                "
-                @keydown="composerKeydown"
-              ></textarea>
-              <div class="composer-toolbar mono">
-                <span v-if="checking" role="status">checking scope…</span>
-                <span v-else-if="research.settings.mode === 'openai'">sent to openai with your key · health scenarios only</span>
-                <span v-else>12 demo agents · health scenarios only</span>
-                <button
-                  v-if="isRunning"
-                  class="stop-btn mono"
-                  type="button"
-                  @click="stopRun(activeId)"
-                >
-                  <Square :size="11" fill="currentColor" /> stop
-                </button>
-                <button
-                  v-else
-                  class="send-btn"
-                  type="submit"
-                  aria-label="Run simulation"
-                  :disabled="!canSubmit"
-                >
-                  <ArrowUp :size="16" />
-                </button>
               </div>
-            </form>
-            <p v-if="submitError" class="submit-error" role="alert">{{ submitError }}</p>
-            <div class="composer-hints mono">
-              <span class="keys">enter to run · shift+enter for newline</span>
-              <span>{{ research.settings.mode === "openai" ? "model estimates · not medical advice" : "demo runs · not medical advice" }}</span>
             </div>
-          </div>
-        </section>
-
-        <div
-          v-if="activeView === 'split'"
-          class="split-handle"
-          role="separator"
-          tabindex="0"
-          aria-orientation="vertical"
-          aria-label="Resize chat and graph"
-          :aria-valuenow="Math.round(splitRatio)"
-          aria-valuemin="30"
-          aria-valuemax="70"
-          @pointerdown="startResize"
-          @keydown="resizeKeydown"
-        ></div>
-
-        <section v-if="activeView !== 'chat'" class="graph-pane" aria-label="Simulation graph">
-          <SimulationGraph :run="graphRun" :stances="latestStances" :stance-source="latestRecord?.provenance?.model || ''" :session-title="activeSession.title" />
-          <div v-if="activeView === 'graph' && isRunning" class="graph-stop">
-            <button class="stop-btn mono" @click="stopRun(activeId)">
-              <Square :size="11" fill="currentColor" /> stop
-            </button>
-          </div>
-        </section>
+            <div class="composer-area">
+              <div v-if="isRunning" class="background-hint" role="status">
+                <span class="status-dot running"></span>This run keeps running
+                when you switch chats.
+              </div>
+              <form class="composer" @submit.prevent="submitRun">
+                <label class="sr-only" for="simulation-prompt"
+                  >Simulation question</label
+                ><textarea
+                  id="simulation-prompt"
+                  ref="composer"
+                  v-model="activeSession.draft"
+                  :maxlength="PROMPT_LIMIT"
+                  rows="3"
+                  :placeholder="
+                    isRunning
+                      ? 'Draft your next question while this run finishes…'
+                      : activeSession.messages.length
+                        ? 'Ask a follow-up or explore another possibility…'
+                        : 'What would you like to simulate?'
+                  "
+                  @keydown="composerKeydown"
+                ></textarea>
+                <div class="composer-toolbar">
+                  <label class="composer-meta run-mode-select">
+                    <AppIcon name="spark" :size="15" />
+                    <span class="sr-only">Simulation provider</span>
+                    <select v-model="runMode" :disabled="isRunning">
+                      <option value="demo">12 demo agents</option>
+                      <option value="openai" :disabled="!providerReady">{{ providerReady ? 'OpenAI · 3 perspectives' : 'AI connection unavailable' }}</option>
+                    </select>
+                  </label><button
+                    v-if="isRunning"
+                    class="stop-button"
+                    type="button"
+                    @click="stopRun(activeId)"
+                  >
+                    <AppIcon name="stop" :size="13" />{{ latestRun?.mode === 'openai' ? 'Stop waiting' : 'Stop run' }}</button
+                  ><button
+                    v-else
+                    class="send-button"
+                    type="submit"
+                    :disabled="!canSubmit"
+                  >
+                    <span>{{ runMode === 'openai' && !providerReady ? 'Connect to run' : 'Run simulation' }}</span
+                    ><AppIcon name="arrow-up" :size="17" />
+                  </button>
+                </div>
+              </form>
+              <p v-if="submitError" class="submit-error" role="alert">
+                {{ submitError }}
+              </p>
+              <p class="composer-disclaimer">
+                {{ runMode === 'openai' ? 'AI explorations are hypotheses, not research findings. API usage is billed to your OpenAI account.' : (providerReady ? 'Demo runs show the workflow. Choose OpenAI for an AI exploration.' : 'Sample simulations show the workflow. ChatGPT-powered AI runs are not available yet.') }}
+                Chats are saved on this device.
+              </p>
+            </div>
+          </section>
+          <section
+            v-if="activeView !== 'Chat'"
+            class="graph-container"
+            aria-label="Simulation graph"
+          >
+            <SimulationGraph
+              v-if="latestRun?.mode !== 'openai'"
+              :key="activeId"
+              :run="latestRun"
+              :session-title="activeSession.title"
+            />
+            <div v-else class="ai-graph-note">
+              <AppIcon name="spark" :size="28" />
+              <h2>Read the research perspectives</h2>
+              <p>OpenAI responses are available in the chat. The illustrative demo graph does not represent these AI runs.</p>
+              <button class="secondary-button" @click="activeView = 'Chat'">View AI responses</button>
+            </div>
+            <div v-if="activeView === 'Graph'" class="graph-actions">
+              <button class="secondary-button" @click="activeView = 'Chat'">
+                <AppIcon name="chat" :size="16" />Back to chat</button
+              ><button
+                v-if="isRunning"
+                class="stop-button"
+                @click="stopRun(activeId)"
+              >
+                <AppIcon name="stop" :size="13" />{{ latestRun?.mode === 'openai' ? 'Stop waiting' : 'Stop run' }}
+              </button>
+            </div>
+          </section>
+        </div>
       </main>
     </div>
-
-    <SettingsDialog v-if="settingsMounted" v-model:open="settingsOpen" :research="research" />
-
-    <Dialog v-model:open="paletteOpen">
-      <DialogContent class="overlay-surface overflow-hidden p-0" :show-close-button="false">
-        <DialogTitle class="sr-only">Jump to chat</DialogTitle>
-        <DialogDescription class="sr-only">Search saved simulations by keyword or meaning</DialogDescription>
-        <Command :should-filter="false" @update:search-term="paletteTerm = $event">
-          <CommandInput placeholder="search chats by keyword or meaning…" class="mono text-[12.5px]" />
-          <CommandList>
-            <CommandGroup v-if="!paletteTerm.trim()" heading="actions">
-              <CommandItem value="new simulation" class="mono" @select="newChat">
-                new simulation
-              </CommandItem>
-            </CommandGroup>
-            <CommandGroup heading="chats">
-              <CommandItem
-                v-for="session in paletteSessions"
-                :key="session.id"
-                :value="session.id"
-                @select="selectChat(session.id)"
-              >
-                <span class="dot" :class="session.runs.at(-1)?.status"></span>
-                <span class="truncate">{{ session.title }}</span>
-                <span v-if="paletteSimilarIds.has(session.id)" class="similar-tag mono">≈ similar</span>
-              </CommandItem>
-            </CommandGroup>
-            <p v-if="!paletteSessions.length" class="mono py-6 text-center text-[12px] text-[var(--faint)]">
-              nothing matches
-            </p>
-          </CommandList>
-          <div class="palette-foot mono">
-            <span class="dot" :class="{ running: semantic.status.value === 'loading', completed: semantic.status.value === 'ready' }"></span>
-            {{ semanticLabel }}
-          </div>
-        </Command>
-      </DialogContent>
-    </Dialog>
-
-    <Dialog v-model:open="dialogOpen">
-      <DialogContent class="overlay-surface sm:max-w-[420px]" :show-close-button="false">
-        <form class="grid gap-4" @submit.prevent="confirmAction">
-          <DialogTitle class="dialog-title">
-            {{ dialogAction === "rename" ? "rename simulation" : "delete simulation?" }}
-          </DialogTitle>
-          <template v-if="dialogAction === 'rename'">
-            <DialogDescription class="sr-only">Choose a new name.</DialogDescription>
-            <div>
-              <label class="field-label mono" for="simulation-title">name</label>
-              <Input
-                id="simulation-title"
-                v-model="editedTitle"
-                :maxlength="TITLE_LIMIT"
-                autocomplete="off"
-                required
-                class="bg-[var(--canvas)]"
-                @focus="$event.target.select()"
-              />
-            </div>
-          </template>
-          <DialogDescription v-else class="dialog-copy">
-            “{{ dialogSession?.title }}” and its conversation will be removed from this device.{{
-              dialogSessionRunning ? " its running demo will also stop." : ""
-            }}
-          </DialogDescription>
-          <DialogFooter class="gap-2">
-            <button type="button" class="stop-btn mono neutral" @click="dialogOpen = false">
-              cancel
-            </button>
-            <button
-              type="submit"
-              class="confirm-btn mono"
-              :class="{ danger: dialogAction === 'delete' }"
-              :disabled="dialogAction === 'rename' && !editedTitle.trim()"
-            >
-              {{ dialogAction === "rename" ? "save name" : "delete" }}
-            </button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <dialog
+      ref="actionDialog"
+      class="action-dialog"
+      aria-labelledby="dialog-title"
+      @keydown.esc.stop
+      @close="restoreDialogFocus"
+      @click="
+        (event) => {
+          if (event.target === actionDialog) actionDialog.close();
+        }
+      "
+    >
+      <form @submit.prevent="confirmAction">
+        <h2 id="dialog-title">
+          {{
+            dialogAction === "rename"
+              ? "Rename simulation"
+              : "Delete simulation?"
+          }}
+        </h2>
+        <template v-if="dialogAction === 'rename'"
+          ><label class="field-label" for="simulation-title">Name</label
+          ><input
+            id="simulation-title"
+            ref="renameInput"
+            v-model="editedTitle"
+            :maxlength="TITLE_LIMIT"
+            autocomplete="off"
+            required
+        /></template>
+        <p v-else>
+          “{{ dialogSession?.title }}” and its conversation will be removed from
+          this device.{{
+            dialogSession && sessionStatus(dialogSession) === "running"
+              ? (dialogSession.runs.at(-1)?.mode === 'openai' ? " We will stop waiting for its AI response. Requests already sent may still incur API usage." : " Its running simulation will also stop.")
+              : ""
+          }}
+        </p>
+        <div class="dialog-actions">
+          <button
+            class="secondary-button"
+            type="button"
+            @click="actionDialog.close()"
+          >
+            Cancel</button
+          ><button
+            :class="dialogAction === 'rename' ? 'send-button' : 'delete-button'"
+            type="submit"
+            :disabled="dialogAction === 'rename' && !editedTitle.trim()"
+          >
+            {{ dialogAction === "rename" ? "Save name" : "Delete simulation" }}
+          </button>
+        </div>
+      </form>
+    </dialog>
   </div>
 </template>

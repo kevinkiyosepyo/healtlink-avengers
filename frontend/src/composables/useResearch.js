@@ -1,9 +1,9 @@
 import { computed, reactive, ref, watch } from "vue";
-import { clear, createStore, del, entries, set } from "idb-keyval";
 import { isHealthTopic, screenPrompt } from "../lib/guardrails.js";
 import { LlmError, PROMPT_VERSION, analyzeScenario, listModels, moderate } from "../lib/llm.js";
 import { analysisKey, createRecord, recordsToCsv } from "../lib/records.js";
 import { STORAGE_KEY as WORKSPACE_KEY } from "../lib/simulationWorkspace.js";
+import { recordStorage } from "../lib/recordStorage.js";
 
 const SETTINGS_KEY = "microfish:settings";
 const KEY_SESSION_KEY = "microfish:openai-key"; // sessionStorage only: cleared when the tab closes
@@ -63,27 +63,31 @@ export function useResearch(sessions) {
   });
 
   // ---------- storage ----------
-  const recordStore = safely(() => createStore("microfish-records", "records"));
   const records = reactive({}); // runId -> record
   // Analysis cache derived from records (no separate store): deleting a chat
   // deletes its records, and with them any cached model output.
   const byAnalysisKey = new Map(); // analysisKey -> runId
   const status = reactive({}); // runId -> analyzing | ready | blocked | error
-  const storageReady = ref(false);
 
-  (async () => {
-    if (recordStore) {
-      for (const [runId, record] of (await safely(() => entries(recordStore))) ?? []) {
+  const storageLoaded = (async () => {
+    try {
+      for (const [runId, record] of await recordStorage.load()) {
+        if (!isRecordLive(record)) continue;
         records[runId] = record;
         indexRecord(record);
         status[runId] = record.error ? "error" : record.analysis?.inScope === false ? "blocked" : "ready";
       }
-    }
-    storageReady.value = true;
-    // Ask the browser not to evict research data under storage pressure.
-    persistent.value = (await safely(() => navigator.storage?.persist?.())) ?? false;
+    } catch { /* Keep the workspace usable when browser storage is unavailable. */ }
   })();
+  // A persistence permission prompt must not hold up loading or new analyses.
+  void storageLoaded.then(async () => {
+    try { persistent.value = (await navigator.storage?.persist?.()) ?? false; }
+    catch { persistent.value = false; }
+  });
 
+  function isRecordLive(record) {
+    return Boolean(record && sessions.value.some(session => session.id === record.sessionId) && recordStorage.isLive(record.sessionId));
+  }
   function indexRecord(record) {
     if (record.analysisKey && record.analysis && !record.error) byAnalysisKey.set(record.analysisKey, record.runId);
   }
@@ -94,27 +98,45 @@ export function useResearch(sessions) {
     delete status[runId];
   }
   async function saveRecord(record) {
+    // Loading must finish first so an older IndexedDB snapshot cannot replace
+    // a newly completed analysis. A deleted chat must never be resurrected.
+    await storageLoaded;
+    if (!isRecordLive(record)) {
+      forgetRecord(record.runId);
+      await recordStorage.deleteRun(record.runId).catch(() => {});
+      return null;
+    }
+    const saved = await recordStorage.save(record).catch(() => true);
+    if (!saved || !isRecordLive(record)) {
+      forgetRecord(record.runId);
+      await recordStorage.deleteRun(record.runId).catch(() => {});
+      return null;
+    }
     if (records[record.runId]) forgetRecord(record.runId);
     records[record.runId] = record;
     indexRecord(record);
-    if (recordStore) await safely(() => set(record.runId, JSON.parse(JSON.stringify(record)), recordStore));
     return record;
   }
 
-  // Deleting a chat deletes its records too (confidentiality: no orphaned data).
+  function pruneRecords() {
+    for (const [runId, record] of Object.entries(records)) {
+      if (!isRecordLive(record)) forgetRecord(runId);
+    }
+  }
+  // The shared deletion hook removes durable records. Keep caches and exports
+  // synchronized as well, including when another entry point deletes a chat.
   watch(
     () => sessions.value.map((session) => session.id).join(","),
-    () => {
-      if (!storageReady.value) return;
-      const live = new Set(sessions.value.map((session) => session.id));
-      for (const [runId, record] of Object.entries(records)) {
-        if (!live.has(record.sessionId)) {
-          forgetRecord(runId);
-          if (recordStore) safely(() => del(runId, recordStore));
-        }
-      }
-    },
+    pruneRecords,
+    { flush: "sync" },
   );
+  const workspaceChanged = event => {
+    if (event.key !== WORKSPACE_KEY && event.key !== null) return;
+    pruneRecords();
+    void recordStorage.load().catch(() => {});
+  };
+  window.addEventListener("storage", workspaceChanged);
+  if (import.meta.hot) import.meta.hot.dispose(() => window.removeEventListener("storage", workspaceChanged));
 
   // ---------- key ----------
   async function testKey() {
@@ -166,6 +188,9 @@ export function useResearch(sessions) {
 
   /** Record a run; in OpenAI mode also analyse it. Resolves to the record. */
   async function analyze({ run, session, guardrails, fresh = false }) {
+    await storageLoaded;
+    if (!isRecordLive({ sessionId: session.id })) return null;
+    pruneRecords();
     const base = { runId: run.id, sessionId: session.id, sessionTitle: session.title, prompt: run.prompt, guardrails };
     if (settings.mode === "demo") {
       status[run.id] = "ready";
@@ -229,14 +254,16 @@ export function useResearch(sessions) {
     else download(`${name}.json`, "application/json", JSON.stringify({ exportedAt: new Date().toISOString(), app: "microfish", records: list }, null, 2));
   }
   function exportRun(runId, format) {
+    pruneRecords();
     if (records[runId]) exportRecords([records[runId]], format, `microfish-run-${runId.slice(0, 8)}-${stamp()}`);
   }
   function exportAll(format) {
+    pruneRecords();
     const list = Object.values(records).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     exportRecords(list, format, `microfish-records-${stamp()}`);
   }
   async function deleteAllData() {
-    if (recordStore) await safely(() => clear(recordStore));
+    await recordStorage.clear().catch(() => {});
     safely(() => indexedDB.deleteDatabase("microfish-embeddings"));
     for (const key of [WORKSPACE_KEY, SETTINGS_KEY, "microfish:stances"]) safely(() => window.localStorage.removeItem(key));
     safely(() => window.sessionStorage.clear());

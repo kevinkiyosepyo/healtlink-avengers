@@ -30,6 +30,18 @@ test('security headers restrict connections to self, OpenAI and the model CDN', 
   })
 })
 
+test('Express serves the shared account API without intercepting unknown routes', async () => {
+  await withServer({ serveStatic: false, env: {} }, async (base) => {
+    const response = await fetch(`${base}/api/account`)
+    assert.equal(response.status, 200)
+    const account = await response.json()
+    assert.equal(account.configured, false)
+    assert.equal(account.user, null)
+    assert.equal(response.headers.get('cache-control'), 'no-store')
+    assert.equal((await fetch(`${base}/api/unknown`)).status, 404)
+  })
+})
+
 test('serves the SPA when a build exists', async () => {
   await withServer({ serveStatic: true }, async (base) => {
     const response = await fetch(`${base}/some/deep/link`)

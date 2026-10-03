@@ -1,14 +1,16 @@
 import express from "express";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { createApiHandler } from "../../server/handlers.js";
+import { nodeHandler } from "../../server/node.js";
 
 const DIST = fileURLToPath(new URL("../../frontend/dist", import.meta.url));
 
-// Serves the built app with strict security headers. There is deliberately no
-// data or model API: chats, records and the researcher's OpenAI key stay in
-// the browser, which talks to api.openai.com directly.
-export function createApp({ serveStatic = existsSync(DIST) } = {}) {
+// Both browser workspaces share static hosting. The primary workspace uses
+// the same account API handlers in Express, Vite development, and Vercel.
+export function createApp({ serveStatic = existsSync(DIST), env = process.env } = {}) {
   const app = express();
+  const accountApi = nodeHandler(createApiHandler({ env }));
   app.disable("x-powered-by");
 
   app.use((req, res, next) => {
@@ -36,6 +38,13 @@ export function createApp({ serveStatic = existsSync(DIST) } = {}) {
   });
 
   app.get("/api/health", (req, res) => res.json({ ok: true }));
+  app.use((req, res, next) => {
+    if (["/api/account", "/api/openai", "/api/simulate"].includes(req.path)
+      || req.path === "/api/auth" || req.path.startsWith("/api/auth/")) {
+      return accountApi(req, res);
+    }
+    next();
+  });
   app.all("/api/{*rest}", (req, res) => res.status(404).json({ error: "not_found" }));
 
   if (serveStatic) {
