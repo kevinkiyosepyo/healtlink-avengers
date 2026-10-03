@@ -23,7 +23,7 @@ const {
   startOpenAIRun,
   stopRun,
 } = useSimulationWorkspace();
-const { account, busy: accountBusy, error: accountError, ready: providerReady, google, chatgpt, connect, disconnect, signout } = useResearcherAccount();
+const { account, busy: accountBusy, error: accountError, ready: providerReady, google, chatgpt, disconnect, signout } = useResearcherAccount();
 const runMode = ref("demo");
 const loginPage = ref(null);
 function enterWorkspace(mode) {
@@ -38,7 +38,7 @@ watch(providerReady, (ready) => {
     }
   }
 });
-const activeView = ref("Chat");
+const activeView = ref("Split");
 function pageFromHash() {
   const hash = window.location.hash.split("?")[0];
   return ({ "#/timeline": "timeline", "#/preflight": "preflight", "#/login": "login", "#/simulations": "simulations" })[hash] || "login";
@@ -197,7 +197,7 @@ async function newChat() {
   navigate("simulations");
   search.value = "";
   sidebarOpen.value = false;
-  activeView.value = "Chat";
+  activeView.value = "Split";
   submitError.value = "";
   await nextTick();
   composer.value?.focus();
@@ -281,10 +281,9 @@ watch(
     :error="accountError"
     @google="google"
     @chatgpt="chatgpt"
-    @connect="connect"
     @disconnect="disconnect"
     @signout="signout"
-    @continue="enterWorkspace('openai')"
+    @continue="enterWorkspace($event)"
     @demo="enterWorkspace('demo')"
   />
   <div
@@ -658,7 +657,7 @@ watch(
                     <span class="sr-only">Simulation provider</span>
                     <select v-model="runMode" :disabled="isRunning">
                       <option value="demo">12 demo agents</option>
-                      <option value="openai">OpenAI · 3 perspectives</option>
+                      <option value="openai" :disabled="!providerReady">{{ providerReady ? 'OpenAI · 3 perspectives' : 'AI connection unavailable' }}</option>
                     </select>
                   </label><button
                     v-if="isRunning"
@@ -682,7 +681,7 @@ watch(
                 {{ submitError }}
               </p>
               <p class="composer-disclaimer">
-                {{ runMode === 'openai' ? 'AI explorations are hypotheses, not research findings. API usage is billed to your OpenAI account.' : 'Demo runs show the workflow. Choose OpenAI for an AI exploration.' }}
+                {{ runMode === 'openai' ? 'AI explorations are hypotheses, not research findings. API usage is billed to your OpenAI account.' : (providerReady ? 'Demo runs show the workflow. Choose OpenAI for an AI exploration.' : 'Sample simulations show the workflow. ChatGPT-powered AI runs are not available yet.') }}
                 Chats are saved on this device.
               </p>
             </div>
