@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import AppIcon from "./components/AppIcon.vue";
 import SimulationGraph from "./components/SimulationGraph.vue";
+import BottleneckTimeline from "./components/BottleneckTimeline.vue";
 import { useSimulationWorkspace } from "./composables/useSimulationWorkspace.js";
 import { PROMPT_LIMIT, TITLE_LIMIT } from "./lib/simulationWorkspace.js";
 
@@ -19,6 +20,29 @@ const {
   stopRun,
 } = useSimulationWorkspace();
 const activeView = ref("Chat");
+function pageFromHash() {
+  return ({ "#/timeline": "timeline" })[window.location.hash] || "simulations";
+}
+const currentPage = ref(pageFromHash());
+const timelinePage = ref(null);
+function syncPage() {
+  currentPage.value = pageFromHash();
+  sidebarOpen.value = false;
+  menuId.value = null;
+}
+function navigate(page) {
+  window.location.hash = ({ timeline: "/timeline" })[page] || "/simulations";
+  currentPage.value = page;
+  sidebarOpen.value = false;
+  menuId.value = null;
+}
+onMounted(() => window.addEventListener("hashchange", syncPage));
+onUnmounted(() => window.removeEventListener("hashchange", syncPage));
+watch(currentPage, async (page) => {
+  await nextTick();
+  if (page === "timeline") timelinePage.value?.focusHeading();
+  else composer.value?.focus();
+});
 const search = ref("");
 const sidebarOpen = ref(false);
 const sidebar = ref(null);
@@ -138,6 +162,7 @@ function runForMessage(message) {
   return activeSession.value?.runs.find((run) => run.id === message.runId);
 }
 function selectChat(id) {
+  navigate("simulations");
   selectSession(id);
   menuId.value = null;
   sidebarOpen.value = false;
@@ -145,6 +170,7 @@ function selectChat(id) {
 }
 async function newChat() {
   if (!createSession()) return;
+  navigate("simulations");
   search.value = "";
   sidebarOpen.value = false;
   activeView.value = "Chat";
@@ -258,6 +284,19 @@ watch(
         <AppIcon name="plus" :size="18" /> New simulation
         <span class="new-chat-hint">↗</span>
       </button>
+      <div class="sidebar-section-label workspace-nav-label">WORKSPACE</div>
+      <nav class="workspace-navigation" aria-label="Workspace pages">
+        <button
+          class="workspace-nav-button"
+          :class="{ active: currentPage === 'timeline' }"
+          :aria-current="currentPage === 'timeline' ? 'page' : undefined"
+          @click="navigate('timeline')"
+        >
+          <AppIcon name="timeline" :size="18" />
+          <span>Bottleneck timeline</span>
+          <AppIcon class="workspace-nav-arrow" name="arrow-up-right" :size="15" />
+        </button>
+      </nav>
       <label class="search-box"
         ><AppIcon name="search" :size="16" /><input
           v-model="search"
@@ -277,13 +316,13 @@ watch(
           :key="session.id"
           class="conversation-row"
           :class="{
-            selected: activeId === session.id,
+            selected: currentPage === 'simulations' && activeId === session.id,
             'has-menu': menuId === session.id,
           }"
         >
           <button
             class="conversation-button"
-            :aria-current="activeId === session.id ? 'page' : undefined"
+            :aria-current="currentPage === 'simulations' && activeId === session.id ? 'page' : undefined"
             @click="selectChat(session.id)"
           >
             <AppIcon name="chat" :size="17" /><span class="conversation-text"
@@ -362,7 +401,7 @@ watch(
             <AppIcon name="sidebar" /></button
           ><span class="breadcrumb-parent">Workspace</span
           ><span class="breadcrumb-divider">/</span
-          ><span class="current-title">{{ activeSession?.title }}</span>
+          ><span class="current-title">{{ currentPage === 'timeline' ? 'Bottleneck timeline' : activeSession?.title }}</span>
         </div>
         <div class="header-status">
           <span v-if="runningCount" class="running-badge" role="status"
@@ -371,7 +410,8 @@ watch(
           ><span class="demo-badge"><span></span>Demo mode</span>
         </div>
       </header>
-      <main v-if="activeSession" class="workspace">
+      <BottleneckTimeline ref="timelinePage" v-show="currentPage === 'timeline'" />
+      <main v-if="activeSession" v-show="currentPage === 'simulations'" class="workspace">
         <div class="workspace-toolbar">
           <div class="workspace-heading">
             <AppIcon name="layers" :size="18" /><span

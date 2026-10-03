@@ -124,6 +124,28 @@ p {
   font-weight: 400;
   color: #65715f;
 }
+.workspace-nav-label {
+  margin-top: 25px;
+  padding-bottom: 9px;
+}
+.workspace-navigation { margin-bottom: 2px; }
+.workspace-nav-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 13px 11px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #53694c;
+  font-size: 12px;
+  font-weight: 550;
+  text-align: left;
+}
+.workspace-nav-button:hover { background: #e8ede2; }
+.workspace-nav-button.active { background: #dfe9d6; border-color: #d2dfc9; color: #315d40; }
+.workspace-nav-arrow { margin-left: auto; opacity: .7; }
 .search-box {
   display: flex;
   align-items: center;
