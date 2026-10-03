@@ -23,12 +23,4 @@ export default defineConfig(({ mode }) => ({
     },
   }],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
-  build: {
-    rollupOptions: {
-      input: {
-        workspace: fileURLToPath(new URL('./index.html', import.meta.url)),
-        researcher: fileURLToPath(new URL('./researcher.html', import.meta.url)),
-      },
-    },
-  },
 }))

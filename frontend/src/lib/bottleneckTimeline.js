@@ -80,15 +80,63 @@ export const TIMELINE_TASKS = Object.freeze(
   ),
 );
 
+function freezeTasks(tasks) {
+  return Object.freeze(tasks.map((task) => Object.freeze({ ...task, dependencies: Object.freeze([...task.dependencies]) })));
+}
+
+// Kevin's original fictional onboarding plan (the default, kept for its tests).
+export const ONBOARDING_PLAN = Object.freeze({
+  id: "onboarding",
+  title: "REST-101 researcher onboarding",
+  startDate: START_DATE,
+  deadline: PROJECT_DEADLINE,
+  milestoneId: "workspace-access",
+  milestoneLabel: "workspace ready",
+  finishLabel: "project handoff",
+  tasks: TIMELINE_TASKS,
+});
+
+// Fictional REST-101 study start-up: from final protocol to first participant
+// enrolled. Durations are illustrative working days, not regulatory timelines.
+export const TRIAL_STARTUP_PLAN = Object.freeze({
+  id: "trial-startup",
+  title: "REST-101 site start-up",
+  startDate: START_DATE,
+  deadline: 20,
+  milestoneId: "activation",
+  milestoneLabel: "site activated",
+  finishLabel: "first participant in",
+  tasks: freezeTasks([
+    { id: "protocol", title: "Finalize protocol v2", owner: "Sponsor", initials: "SP", duration: 3, dependencies: [],
+      description: "Lock the protocol and consent versions that every downstream step depends on." },
+    { id: "irb", title: "Ethics board review", owner: "IRB", initials: "IR", duration: 10, dependencies: ["protocol"],
+      description: "Submit protocol and consent for review; the site cannot activate before approval is recorded." },
+    { id: "contract", title: "Site contract & budget", owner: "Site contracts", initials: "SC", duration: 8, dependencies: ["protocol"],
+      description: "Negotiate the clinical trial agreement and per-visit budget in parallel with ethics review." },
+    { id: "training", title: "Staff training & delegation log", owner: "Site coordinator", initials: "CO", duration: 3, dependencies: ["protocol"],
+      description: "Train site staff on the protocol and record who may perform each study task." },
+    { id: "edc", title: "EDC & randomization build", owner: "Data manager", initials: "DM", duration: 5, dependencies: ["protocol"],
+      description: "Build the case report forms and randomization so data capture works on day one." },
+    { id: "siv", title: "Site initiation visit", owner: "CRO monitor", initials: "MO", duration: 1, dependencies: ["irb", "contract", "training"],
+      description: "Confirm approvals, contract, training and supplies are in place at the site." },
+    { id: "activation", title: "Site activation", owner: "Sponsor", initials: "SP", duration: 1, dependencies: ["siv", "edc"],
+      description: "Issue the green light once the initiation visit and data systems are complete." },
+    { id: "fpi", title: "First participant enrolled", owner: "Principal investigator", initials: "PI", duration: 2, dependencies: ["activation"],
+      description: "Screen, consent and enroll the first participant under the approved protocol." },
+  ]),
+});
+
+export const PLANS = Object.freeze([TRIAL_STARTUP_PLAN, ONBOARDING_PLAN]);
+
 function normalizeDelay(value) {
   return Number.isFinite(value)
     ? Math.max(0, Math.min(15, Math.trunc(value)))
     : 0;
 }
 
-function schedule(delays) {
+function schedule(tasks, delays) {
   const byId = new Map();
-  for (const task of TIMELINE_TASKS) {
+  for (const task of tasks) {
     const delay = normalizeDelay(delays?.[task.id]);
     const start = Math.max(
       0,
@@ -104,9 +152,10 @@ function schedule(delays) {
  * All offsets are zero-based working-day boundaries; a two-day task occupies
  * [0, 2). Slack is relative to the calculated finish, not the target deadline.
  */
-export function calculateTimeline(delays = {}) {
-  const baseline = schedule({});
-  const current = schedule(delays);
+export function calculateTimeline(delays = {}, plan = ONBOARDING_PLAN) {
+  const TIMELINE_TASKS = plan.tasks;
+  const baseline = schedule(TIMELINE_TASKS, {});
+  const current = schedule(TIMELINE_TASKS, delays);
   const finish = Math.max(...Array.from(current.values(), (task) => task.end));
   const baselineFinish = Math.max(
     ...Array.from(baseline.values(), (task) => task.end),
@@ -167,8 +216,8 @@ export function calculateTimeline(delays = {}) {
     baselineFinish,
     shift: finish - baselineFinish,
     affectedCount: tasks.filter((task) => task.affected).length,
-    deadlineBuffer: PROJECT_DEADLINE - finish,
-    readyDay: current.get("workspace-access").end,
+    deadlineBuffer: plan.deadline - finish,
+    readyDay: current.get(plan.milestoneId).end,
   };
 }
 

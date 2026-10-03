@@ -1,5 +1,5 @@
 <script setup>
-import { Ellipsis, Pencil, Plus, Search, SlidersHorizontal, Trash2, X } from "@lucide/vue";
+import { CalendarRange, Ellipsis, FileCheck2, FlaskConical, Pencil, Plus, Search, SlidersHorizontal, Trash2, X } from "@lucide/vue";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,13 +15,15 @@ const props = defineProps({
   filteredSessions: { type: Array, required: true },
   similarIds: { type: Set, default: () => new Set() },
   statusOf: { type: Function, default: null },
+  currentPage: { type: String, default: "simulations" },
+  user: { type: Object, default: null },
   searchStatus: { type: String, default: "" },
   activeId: { type: String, default: null },
   runningCount: { type: Number, default: 0 },
   closable: { type: Boolean, default: false },
 });
 const search = defineModel("search", { type: String, default: "" });
-const emit = defineEmits(["new", "select", "rename", "delete", "palette", "settings", "close"]);
+const emit = defineEmits(["new", "select", "rename", "delete", "palette", "settings", "navigate", "close"]);
 
 function sessionStatus(session) {
   if (props.statusOf) return props.statusOf(session);
@@ -64,8 +66,21 @@ const isMac =
       />
     </div>
 
+    <div class="section-label mono"><span>tools</span></div>
+    <nav class="tool-nav" aria-label="Research tools">
+      <button class="sidebar-row-button" :class="{ current: currentPage === 'build' }" :aria-current="currentPage === 'build' ? 'page' : undefined" @click="emit('navigate', 'build')">
+        <FlaskConical :size="15" /> study build
+      </button>
+      <button class="sidebar-row-button" :class="{ current: currentPage === 'preflight' }" :aria-current="currentPage === 'preflight' ? 'page' : undefined" @click="emit('navigate', 'preflight')">
+        <FileCheck2 :size="15" /> document preflight
+      </button>
+      <button class="sidebar-row-button" :class="{ current: currentPage === 'timeline' }" :aria-current="currentPage === 'timeline' ? 'page' : undefined" @click="emit('navigate', 'timeline')">
+        <CalendarRange :size="15" /> start-up timeline
+      </button>
+    </nav>
+
     <div class="section-label mono">
-      <span>{{ search.trim() ? searchStatus : "chats" }}</span><span>{{ search.trim() ? filteredSessions.length : sessions.length }}</span>
+      <span>{{ search.trim() ? searchStatus : "rehearsals" }}</span><span>{{ search.trim() ? filteredSessions.length : sessions.length }}</span>
     </div>
 
     <nav class="conversation-list" aria-label="Saved simulations">
@@ -77,7 +92,7 @@ const isMac =
           v-for="session in filteredSessions"
           :key="session.id"
           class="conversation-row"
-          :class="{ selected: activeId === session.id }"
+          :class="{ selected: currentPage === 'simulations' && activeId === session.id }"
         >
           <button
             class="conversation-button"
@@ -119,11 +134,11 @@ const isMac =
         >{{ runningCount }} running — other chats keep going
       </p>
       <p v-else>room for every what-if — runs continue in parallel</p>
-      <div class="identity">
-        <span class="avatar">m</span>
-        <span>my workspace</span>
-        <span class="pill mono" style="margin-left: auto">local demo</span>
-      </div>
+      <button class="identity" @click="emit('settings')">
+        <span class="avatar">{{ user ? (user.name || user.email || "r").charAt(0).toLowerCase() : "m" }}</span>
+        <span class="identity-name">{{ user ? user.name || user.email : "my workspace" }}</span>
+        <span class="pill mono" style="margin-left: auto">{{ user ? "signed in" : "sign in" }}</span>
+      </button>
     </div>
   </aside>
 </template>

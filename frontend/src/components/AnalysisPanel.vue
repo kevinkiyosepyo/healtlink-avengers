@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { ChevronDown, Copy, Download, RotateCcw } from "@lucide/vue";
 import StatusBadge from "./StatusBadge.vue";
-import { AGENTS, STANCE_LEVELS, agentId } from "../lib/agents.js";
+import { AGENTS, STANCE_LEVELS, agentId, stanceColor } from "../lib/agents.js";
 import { ERROR_COPY } from "../composables/useResearch.js";
 import { BLOCK_REASONS } from "../lib/guardrails.js";
 
@@ -52,10 +52,6 @@ const badge = computed(() => {
       };
   }
 });
-function stanceTone(score) {
-  if (score < 2) return `color-mix(in oklab, var(--stance-opposed) ${((2 - score) / 2) * 100}%, var(--stance-neutral))`;
-  return `color-mix(in oklab, var(--stance-supportive) ${((score - 2) / 2) * 100}%, var(--stance-neutral))`;
-}
 function toggleWhy(id) {
   const next = new Set(showWhy.value);
   next.has(id) ? next.delete(id) : next.add(id);
@@ -79,7 +75,7 @@ const time = computed(() => (props.record ? new Date(props.record.createdAt).toL
     <div v-if="record && !isOpenAi" class="analysis-demo">
       <span class="mono">record saved · demo playback · 12 illustrative agents · no model called</span>
       <span class="analysis-actions">
-        <button class="glyph-btn mono" @click="emit('export', 'json')"><Download :size="12" /> json</button>
+        <button class="mini-btn" @click="emit('export', 'json')"><Download :size="12" /> json</button>
       </span>
     </div>
 
@@ -87,9 +83,9 @@ const time = computed(() => (props.record ? new Date(props.record.createdAt).toL
       <header class="analysis-head">
         <StatusBadge :status="badge.status" :label="badge.label" :meta="badge.meta" />
         <span v-if="status === 'ready'" class="analysis-actions">
-          <button class="glyph-btn mono" title="Re-run without cache" @click="emit('retry')"><RotateCcw :size="12" /> re-run fresh</button>
-          <button class="glyph-btn mono" @click="emit('export', 'csv')"><Download :size="12" /> csv</button>
-          <button class="glyph-btn mono" @click="emit('export', 'json')"><Download :size="12" /> json</button>
+          <button class="mini-btn" title="Re-run without cache" @click="emit('retry')"><RotateCcw :size="12" /> re-run fresh</button>
+          <button class="mini-btn" @click="emit('export', 'csv')"><Download :size="12" /> csv</button>
+          <button class="mini-btn" @click="emit('export', 'json')"><Download :size="12" /> json</button>
         </span>
       </header>
 
@@ -99,7 +95,7 @@ const time = computed(() => (props.record ? new Date(props.record.createdAt).toL
 
       <div v-else-if="status === 'error'" class="analysis-error">
         <p>{{ ERROR_COPY[record?.error] ?? ERROR_COPY.unavailable }}</p>
-        <button class="glyph-btn mono" @click="emit('retry')"><RotateCcw :size="12" /> retry analysis</button>
+        <button class="mini-btn" @click="emit('retry')"><RotateCcw :size="12" /> retry analysis</button>
       </div>
 
       <p v-else-if="status === 'blocked'" class="analysis-note">
@@ -127,7 +123,7 @@ const time = computed(() => (props.record ? new Date(props.record.createdAt).toL
                 </td>
                 <td>
                   <span class="scale" :aria-label="`${STANCE_LEVELS[row.stance.score]} (${row.stance.score} of 4)`">
-                    <i v-for="step in 5" :key="step" :class="{ on: step - 1 === row.stance.score }" :style="step - 1 === row.stance.score ? { background: stanceTone(row.stance.score) } : null"></i>
+                    <i v-for="step in 5" :key="step" :class="{ on: step - 1 === row.stance.score }" :style="step - 1 === row.stance.score ? { background: stanceColor(row.stance.score) } : null"></i>
                   </span>
                   <span class="stance-label">{{ STANCE_LEVELS[row.stance.score] }}</span>
                 </td>
@@ -173,7 +169,7 @@ const time = computed(() => (props.record ? new Date(props.record.createdAt).toL
           <dt>record</dt>
           <dd class="fp">
             <span :title="record.fingerprint">sha-256 {{ record.fingerprint.slice(0, 16) }}…</span>
-            <button class="glyph-btn" :aria-label="copied ? 'Copied' : 'Copy fingerprint'" @click="copyFingerprint"><Copy :size="11" /> {{ copied ? "copied" : "copy" }}</button>
+            <button class="mini-btn" :aria-label="copied ? 'Copied' : 'Copy fingerprint'" @click="copyFingerprint"><Copy :size="11" /> {{ copied ? "copied" : "copy" }}</button>
           </dd>
         </dl>
       </div>
@@ -206,23 +202,6 @@ const time = computed(() => (props.record ? new Date(props.record.createdAt).toL
 .analysis-actions {
   display: inline-flex;
   gap: 4px;
-}
-.glyph-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 24px;
-  padding: 0 8px;
-  border: 1px solid var(--hairline);
-  border-radius: 6px;
-  background: var(--canvas);
-  color: var(--muted);
-  font-size: 11px;
-  transition: color 120ms var(--ease), border-color 120ms var(--ease);
-}
-.glyph-btn:hover {
-  border-color: color-mix(in srgb, var(--muted) 40%, var(--hairline));
-  color: var(--ink);
 }
 .analysis-note {
   margin: 10px 0 0;

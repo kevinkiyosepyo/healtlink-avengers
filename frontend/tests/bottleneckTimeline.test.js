@@ -167,3 +167,20 @@ test("working-day offsets skip weekends and are stable across daylight-saving bo
   assert.throws(() => addWorkingDays("not a date", 1), /YYYY-MM-DD/);
   assert.throws(() => addWorkingDays(START_DATE, 1.5), /integer/);
 });
+
+test("trial start-up plan: ethics review is the critical path and contract slack absorbs delays", async () => {
+  const { TRIAL_STARTUP_PLAN, PLANS } = await import("../src/lib/bottleneckTimeline.js");
+  assert.equal(PLANS[0], TRIAL_STARTUP_PLAN);
+  const base = calculateTimeline({}, TRIAL_STARTUP_PLAN);
+  assert.equal(base.finish, 17);
+  assert.equal(base.deadlineBuffer, 3);
+  assert.equal(base.readyDay, 15);
+  assert.deepEqual(base.tasks.filter((t) => t.critical).map((t) => t.id), ["protocol", "irb", "siv", "activation", "fpi"]);
+  assert.equal(task(base, "contract").slack, 2);
+  const absorbed = calculateTimeline({ contract: 2 }, TRIAL_STARTUP_PLAN);
+  assert.equal(absorbed.shift, 0);
+  const slipped = calculateTimeline({ irb: 5 }, TRIAL_STARTUP_PLAN);
+  assert.equal(slipped.shift, 5);
+  assert.equal(slipped.deadlineBuffer, -2);
+  assert.deepEqual(task(slipped, "irb").descendantIds, ["siv", "activation", "fpi"]);
+});

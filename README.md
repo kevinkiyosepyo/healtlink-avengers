@@ -1,39 +1,46 @@
-# Microfish research workspace
+# Microfish simulation workspace
 
-Microfish is a Vue/Vite research-planning prototype with Google sign-in, concurrent scenario chats, an interactive bottleneck timeline, and document preflight checks. Sample simulations and graphs are explicitly illustrative.
-
-## Workspaces
-
-- **Primary workspace (`/`, `/#/login`):** Google sign-in, chat/split/graph views, timeline dependencies, and document preflight. Researchers can enter without an API key. The local preview links to the configured production sign-in page when local OAuth settings are absent. ChatGPT identity and subscription inference remain unavailable until approved and configured; see [authentication setup](AUTH_SETUP.md).
-- **Research workspace (`/researcher.html`):** the existing research interface, semantic search, knowledge graph, stakeholder analyses, and research-record exports. The primary sidebar links to it, and it links back. It defaults to local demo mode. Its optional **model & data** connection uses a researcher-supplied OpenAI key directly from the browser; this existing research workflow is separate from primary onboarding.
-
-Both pages share local scenario conversations. The research page owns its additional IndexedDB analysis records and exports. A primary API-backed run has no stakeholder-analysis record; the research page must not label it a demo or depict its graph as measured output.
+A Vue and Vite workspace with ChatGPT-style simulation conversations. Create a new chat for each scenario, switch between chats while runs continue, and keep separate drafts and run histories. The sidebar supports search, rename, and delete. Chat, graph, and split views show the selected conversation.
 
 ## Run locally
 
 ```sh
 npm run install:all
-npm run dev
-npm test
-npm run build
-npm start
+npm run dev        # Vite dev server
+npm test           # frontend + backend suites
+npm start          # build, then serve everything from one Express process
 ```
 
-`npm run dev` serves both pages and the account API with Vite. `npm start` builds and serves both pages from Express (port 8787 by default), including the same account API handlers and `/api/health`. Server configuration loads from the ignored root `.env`; the standalone server also accepts an ignored `backend/.env`. Start without secrets to use the demo, or follow [AUTH_SETUP.md](AUTH_SETUP.md) for Google authentication.
+## What it does (Track 2: AI for clinical research)
 
-Vercel uses `vercel.json`, builds both HTML entries, and serves the `api/` functions. Google credentials belong in encrypted server-only environment settings, never client code or source control.
+- **Stakeholder rehearsal:** describe a protocol or operations change (fewer visits, e-consent, evening hours) and see how participants, sites, oversight, sponsor and data teams would likely respond, as a knowledge graph plus a stance table.
+- **Study build:** paste a protocol's schedule of activities to get a visit × assessment matrix, a draft CRF, edit checks and participant/site burden. Paste a source note to get extracted values and auto-generated queries (out of range, missing, outside visit window).
+- **Document preflight:** local checks across protocol, consent and onboarding text: mismatched study IDs or visit counts, outdated versions, open questions, each with its source line.
+- **Start-up timeline:** delay any start-up step (ethics review, contracts, EDC build…) and see whether first participant in moves.
 
-## Data handling
+## Modes
 
-- Chats, drafts, and selection stay in this browser profile. They are not cloud-synced or isolated by Google account. Use separate browser profiles on shared devices.
-- Google requests only name, email, and profile identity scopes. Gmail mailbox access is not configured.
-- Primary onboarding contains no API-key entry. Existing API connections use encrypted, session-bound HttpOnly cookies and server-side OpenAI requests; see the authentication documentation for the exact limits.
-- The research page's optional key stays in memory by default; **remember for this tab** uses sessionStorage. That page sends scenarios directly to OpenAI after local screening and provider moderation. It stores research records in IndexedDB, including prompts, model provenance, guardrail results, and a SHA-256 fingerprint. Exports are JSON or CSV. Deleting a chat also deletes its research records.
-- Semantic search downloads the embedding model from Hugging Face and computes embeddings locally. Model files are browser-cached. Research text is not sent to the model CDN.
-- Demo playback makes no inference requests. AI output is exploratory, uncited planning material, not empirical evidence or medical advice. Stopping a browser request does not guarantee an upstream billable request stops.
+- **Demo (default):** 12 illustrative agents and a local playback. No model is called and nothing leaves the browser.
+- **Your OpenAI key:** open **model & data**, paste a key and verify it, then pick a model. Each scenario is screened (local rules plus OpenAI moderation), then all 11 stakeholder groups are scored in one structured request. The key and scenario go **directly from the browser to api.openai.com**; there is no microfish server-side key, proxy or database. The key stays in memory unless you opt into "remember for this tab".
+
+Every run is saved as a research record in IndexedDB, with prompt, guardrail results, provenance (model, temperature, seed, prompt version, latency, tokens) and a SHA-256 fingerprint. Export a run or the whole workspace as CSV (long format) or JSON. Deleting a chat deletes its records; **delete all local data** wipes everything.
+
+## Current behavior
+
+Runs are explicitly labeled local demos: each lasts about 24 seconds and illustrates 12 sample agents. Multiple chats can run concurrently; each chat allows one active run. Stop affects only that chat. Follow-up questions start additional runs in the same conversation. The graph is an illustrative topology, not an AI-generated result.
+
+Conversations, drafts, and active selection are saved in this browser's local storage. Reloading restores demo progress from elapsed time, including demos whose duration has already elapsed. This is local playback recovery; no server work runs while the browser is closed. Limits are 40 chats per browser and 30 runs per chat, with visible notices when capacity or browser storage is unavailable. If another tab changes saved chats, this tab pauses saving and shows a reload notice to prevent overwriting those changes; copy any unsaved text before reloading.
 
 ## Verification
 
-`npm test` runs the authentication, frontend, and Express suites; `npm run build` builds both workspaces. OAuth and inference unit tests use mocked providers. Google identity sign-in was separately verified in production. ChatGPT-plan inference has not been verified or enabled.
+```sh
+cd frontend
+npm test
+npm run build
+```
 
-Private conversation archives, personal onboarding notes, local browser evidence, credentials, build output, and dependencies are excluded from the public source snapshot. The included onboarding case study is fictional.
+The deterministic controller tests cover concurrent runs, isolation, stop/delete behavior, history and draft persistence, reload recovery, and storage failures.
+
+## Connecting a simulation engine
+
+`frontend/src/lib/simulationWorkspace.js` owns session-scoped run IDs and lifecycle changes; `frontend/src/composables/useSimulationWorkspace.js` connects it to Vue. Replace the demo `startRun`/`tick` lifecycle with backend job creation and event or polling updates, routing all results by session and run ID. Wire cancellation to the backend, and replace illustrative assistant messages and graph data with real output. AI providers, document ingestion, server persistence, and authentication are not connected. Keep secrets on the server, never in client code or committed `.env` files.
