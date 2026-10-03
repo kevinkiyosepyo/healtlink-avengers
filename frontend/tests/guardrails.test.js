@@ -10,6 +10,8 @@ const allowedPrompts = [
   'What happens if paramedics stabilize patients before the long rural transfer?',
   'How might painkillers prescribing limits affect seniors with chronic pain?',
   'Would a flu shots pop-up at the library help commuters?',
+  'What happens to retention if REST-101 cuts clinic visits from 4 to 3?',
+  'How would e-consent with a video explainer change enrollment at two sites?',
 ]
 
 test('community health scenarios pass the local screen', () => {

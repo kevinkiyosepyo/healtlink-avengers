@@ -144,12 +144,6 @@ function onKeyInput() {
   color: var(--faint);
   font-size: 11px;
 }
-.hint {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12.5px;
-  line-height: 1.5;
-}
 .row-between {
   display: flex;
   align-items: center;
@@ -159,20 +153,6 @@ function onKeyInput() {
 .key-row {
   display: flex;
   gap: 6px;
-}
-.field {
-  width: 100%;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
-  outline: 0;
-  background: var(--canvas);
-  color: var(--ink);
-  font-size: 12.5px;
-}
-.field:focus-visible {
-  border-color: color-mix(in srgb, var(--accent) 60%, var(--hairline));
 }
 .grid3 {
   display: grid;
@@ -235,11 +215,6 @@ function onKeyInput() {
 .ghost-btn:hover:not(:disabled) {
   color: var(--ink);
 }
-.primary-btn {
-  border-color: transparent;
-  background: var(--accent);
-  color: #fff;
-}
 .primary-btn:disabled,
 .ghost-btn:disabled {
   opacity: 0.45;
@@ -251,15 +226,6 @@ function onKeyInput() {
 .danger-btn.solid {
   background: var(--danger);
   color: #fff;
-}
-.link-btn {
-  justify-self: start;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--faint);
-  font-size: 11px;
-  text-decoration: underline;
 }
 .footer {
   display: flex;

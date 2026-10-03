@@ -3,18 +3,13 @@ import { clear, createStore, del, entries, set } from "idb-keyval";
 import { isHealthTopic, screenPrompt } from "../lib/guardrails.js";
 import { LlmError, PROMPT_VERSION, analyzeScenario, listModels, moderate } from "../lib/llm.js";
 import { analysisKey, createRecord, recordsToCsv } from "../lib/records.js";
+import { downloadText, stamp } from "../lib/download.js";
+import { readJson, writeJson } from "../lib/storage.js";
 import { STORAGE_KEY as WORKSPACE_KEY } from "../lib/simulationWorkspace.js";
 
 const SETTINGS_KEY = "microfish:settings";
 const KEY_SESSION_KEY = "microfish:openai-key"; // sessionStorage only: cleared when the tab closes
 
-function readJson(storage, key, fallback) {
-  try {
-    return JSON.parse(storage.getItem(key)) ?? fallback;
-  } catch {
-    return fallback;
-  }
-}
 function safely(fn) {
   try {
     return fn();
@@ -39,7 +34,7 @@ let instance;
 export function useResearch(sessions) {
   if (instance) return instance;
 
-  const saved = typeof window === "undefined" ? {} : readJson(window.localStorage, SETTINGS_KEY, {});
+  const saved = readJson(SETTINGS_KEY, {});
   const settings = reactive({
     mode: saved.mode === "openai" ? "openai" : "demo",
     model: saved.model || "",
@@ -55,7 +50,7 @@ export function useResearch(sessions) {
 
   watch(
     settings,
-    () => safely(() => window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))),
+    () => writeJson(SETTINGS_KEY, settings),
     { deep: true },
   );
   watch([apiKey, () => settings.rememberKey], ([key, remember]) => {
@@ -217,16 +212,9 @@ export function useResearch(sessions) {
   }
 
   // ---------- export / delete ----------
-  function download(name, type, text) {
-    const url = URL.createObjectURL(new Blob([text], { type }));
-    const link = Object.assign(document.createElement("a"), { href: url, download: name });
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-  const stamp = () => new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
   function exportRecords(list, format, name) {
-    if (format === "csv") download(`${name}.csv`, "text/csv;charset=utf-8", recordsToCsv(list));
-    else download(`${name}.json`, "application/json", JSON.stringify({ exportedAt: new Date().toISOString(), app: "microfish", records: list }, null, 2));
+    if (format === "csv") downloadText(`${name}.csv`, "text/csv;charset=utf-8", recordsToCsv(list));
+    else downloadText(`${name}.json`, "application/json", JSON.stringify({ exportedAt: new Date().toISOString(), app: "microfish", records: list }, null, 2));
   }
   function exportRun(runId, format) {
     if (records[runId]) exportRecords([records[runId]], format, `microfish-run-${runId.slice(0, 8)}-${stamp()}`);
@@ -238,7 +226,10 @@ export function useResearch(sessions) {
   async function deleteAllData() {
     if (recordStore) await safely(() => clear(recordStore));
     safely(() => indexedDB.deleteDatabase("microfish-embeddings"));
-    for (const key of [WORKSPACE_KEY, SETTINGS_KEY, "microfish:stances"]) safely(() => window.localStorage.removeItem(key));
+    // Every key microfish writes; keep in sync when adding persisted state.
+    for (const key of [WORKSPACE_KEY, SETTINGS_KEY, "microfish:preflight", "microfish:timeline", "microfish:study-build"]) {
+      safely(() => window.localStorage.removeItem(key));
+    }
     safely(() => window.sessionStorage.clear());
     window.location.reload();
   }

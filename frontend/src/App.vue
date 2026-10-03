@@ -1,5 +1,5 @@
 <script setup>
-import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, h, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { ArrowUp, PanelLeft, Square } from "@lucide/vue";
 import SidebarPanel from "./components/SidebarPanel.vue";
 import BootScreen from "./components/fx/BootScreen.vue";
@@ -29,13 +29,48 @@ import { BLOCK_REASONS } from "./lib/guardrails.js";
 import { useSimulationWorkspace } from "./composables/useSimulationWorkspace.js";
 import { PROMPT_LIMIT, TITLE_LIMIT } from "./lib/simulationWorkspace.js";
 
-// Vue Flow is only needed once the graph is opened.
-const SimulationGraph = defineAsyncComponent(() => import("./components/SimulationGraph.vue"));
+// Views load on demand; if a chunk can't be fetched (e.g. a stale tab after a
+// deploy) show a retry instead of an empty pane.
+const LoadError = () =>
+  h("p", { class: "load-error mono" }, ["this view failed to load — ", h("button", { class: "glyph-link", onClick: () => window.location.reload() }, "reload")]);
+const Nothing = () => null;
+const lazy = (loader, errorComponent = LoadError) => defineAsyncComponent({ loader, errorComponent, timeout: 20_000 });
+const SimulationGraph = lazy(() => import("./components/SimulationGraph.vue"));
 // Welcome effects (motion-v) and settings load on demand to keep first paint light.
-const BlurReveal = defineAsyncComponent(() => import("./components/ui/blur-reveal/BlurReveal.vue"));
-const FlickeringGrid = defineAsyncComponent(() => import("./components/ui/flickering-grid/FlickeringGrid.vue"));
-const SettingsDialog = defineAsyncComponent(() => import("./components/SettingsDialog.vue"));
+const BlurReveal = lazy(() => import("./components/ui/blur-reveal/BlurReveal.vue"));
+const FlickeringGrid = lazy(() => import("./components/ui/flickering-grid/FlickeringGrid.vue"), Nothing);
+const SettingsDialog = lazy(() => import("./components/SettingsDialog.vue"));
 const settingsMounted = ref(false);
+const JumpScare = lazy(() => import("./components/fx/JumpScare.vue"), Nothing);
+const StudyBuildPage = lazy(() => import("./components/StudyBuildPage.vue"));
+const PreflightPage = lazy(() => import("./components/PreflightPage.vue"));
+const TimelinePage = lazy(() => import("./components/TimelinePage.vue"));
+
+// Hash routes for the research tools; chats stay on the default page.
+const PAGES = { "#/build": "build", "#/preflight": "preflight", "#/timeline": "timeline" };
+const PAGE_TITLES = { build: "study build", preflight: "document preflight", timeline: "start-up timeline" };
+const currentPage = ref(PAGES[window.location.hash] ?? "simulations");
+const toolPage = ref(null);
+function navigate(page) {
+  const hash = Object.keys(PAGES).find((key) => PAGES[key] === page) ?? "#/";
+  if (window.location.hash !== hash) history.pushState(null, "", hash);
+  currentPage.value = page;
+  sidebarOpen.value = false;
+  paletteOpen.value = false;
+}
+// Study build hands its burden summary to a new stakeholder rehearsal.
+async function rehearsePrompt(prompt) {
+  if (!createSession()) return;
+  navigate("simulations");
+  activeView.value = "chat";
+  await nextTick();
+  activeSession.value.draft = prompt;
+  await nextTick();
+  composer.value?.focus();
+}
+function syncPage() {
+  currentPage.value = PAGES[window.location.hash] ?? "simulations";
+}
 
 const {
   sessions,
@@ -81,21 +116,24 @@ const messageList = ref(null);
 const submitError = ref("");
 const { scrollToBottom } = useLenis(messageList);
 
-const isMac =
-  typeof navigator !== "undefined" && /mac|iphone|ipad/i.test(navigator.platform);
 const starters = [
   {
-    title: "explore a community",
-    prompt: "How might a community respond to a new neighborhood health clinic?",
+    title: "cut the visit burden",
+    prompt: "What happens to retention if REST-101 cuts clinic visits from 4 to 3 and adds a remote check-in at week 2?",
   },
   {
-    title: "compare two approaches",
-    prompt: "How might appointment reminders by text compare with reminders by phone?",
+    title: "widen the enrollment window",
+    prompt: "How would offering evening and weekend study visits affect enrollment and site staffing?",
   },
   {
-    title: "test a what-if",
-    prompt: "What might change if a clinic offered evening and weekend appointments?",
+    title: "modernize consent",
+    prompt: "What changes if REST-101 moves to e-consent with a short video explainer?",
   },
+];
+const tools = [
+  { page: "build", title: "study build", note: "protocol → schedule, crf, edit checks and auto queries" },
+  { page: "preflight", title: "document preflight", note: "catch protocol ↔ consent conflicts before submission" },
+  { page: "timeline", title: "start-up timeline", note: "see which delay actually moves first-participant-in" },
 ];
 
 const sortedSessions = computed(() =>
@@ -201,6 +239,7 @@ function runMeta(run) {
 }
 
 function selectChat(id) {
+  navigate("simulations");
   selectSession(id);
   sidebarOpen.value = false;
   paletteOpen.value = false;
@@ -208,6 +247,7 @@ function selectChat(id) {
 }
 async function newChat() {
   paletteOpen.value = false;
+  navigate("simulations");
   if (!createSession()) return;
   search.value = "";
   sidebarOpen.value = false;
@@ -358,7 +398,13 @@ function globalKeydown(event) {
     paletteOpen.value = !paletteOpen.value;
   }
 }
+watch(currentPage, async (page) => {
+  await nextTick();
+  if (page !== "simulations") setTimeout(() => toolPage.value?.focusHeading?.(), 50);
+});
+onUnmounted(() => window.removeEventListener("popstate", syncPage));
 onMounted(() => {
+  window.addEventListener("popstate", syncPage);
   window.addEventListener("keydown", globalKeydown);
   // Load the embedding model after first paint so it never competes with the UI.
   const startIndex = () => semantic.start();
@@ -377,6 +423,7 @@ watch(
 </script>
 
 <template>
+  <JumpScare />
   <Transition name="boot">
     <BootScreen v-if="booting" @done="finishBoot" />
   </Transition>
@@ -397,6 +444,8 @@ watch(
       @delete="openAction('delete', $event)"
       @palette="paletteOpen = true"
       @settings="settingsOpen = true"
+      :current-page="currentPage"
+      @navigate="navigate"
     />
 
     <Sheet v-model:open="sidebarOpen">
@@ -428,6 +477,8 @@ watch(
             sidebarOpen = false;
             settingsOpen = true;
           "
+          :current-page="currentPage"
+          @navigate="navigate"
           @close="sidebarOpen = false"
         />
       </SheetContent>
@@ -445,7 +496,7 @@ watch(
             <PanelLeft :size="16" />
           </button>
           <span>workspace</span><span>/</span>
-          <span class="current">{{ activeSession?.title }}</span>
+          <span class="current">{{ currentPage === "simulations" ? activeSession?.title : PAGE_TITLES[currentPage] }}</span>
         </div>
         <div class="topbar-right">
           <StatusBadge
@@ -463,7 +514,7 @@ watch(
               :label="research.modeLabel.value"
             />
           </button>
-          <nav class="segmented mono" aria-label="Workspace view">
+          <nav v-if="currentPage === 'simulations'" class="segmented mono" aria-label="Workspace view">
             <button
               v-for="view in views"
               :key="view"
@@ -481,8 +532,13 @@ watch(
         <span class="mono">note —</span><span>{{ storageWarning }}</span>
       </div>
 
+      <div v-if="currentPage !== 'simulations'" class="tool-shell">
+        <StudyBuildPage v-if="currentPage === 'build'" ref="toolPage" @rehearse="rehearsePrompt" />
+        <PreflightPage v-else-if="currentPage === 'preflight'" ref="toolPage" />
+        <TimelinePage v-else ref="toolPage" />
+      </div>
       <main
-        v-if="activeSession"
+        v-else-if="activeSession"
         ref="workspaceEl"
         class="workspace"
         :class="`view-${activeView}`"
@@ -502,11 +558,13 @@ watch(
               />
               <div class="column">
                 <BlurReveal :key="activeId" :delay="0.12" :duration="0.6" blur="8px" :y-offset="10">
-                  <p class="eyebrow mono">a little curiosity — a world of possibilities</p>
-                  <h1>one question.<br />many possible futures.</h1>
+                  <p class="eyebrow mono">
+                    <span class="beta-pill">beta</span> trial ops copilot — track 2 · clinical research
+                  </p>
+                  <h1>rehearse the trial<br />before it reaches your sites.</h1>
                   <p class="welcome-copy">
-                    give each what-if its own chat. explore a scenario, then start another alongside
-                    it — runs keep going in parallel.
+                    test a protocol change against participants, sites, oversight and sponsors — then
+                    check your documents and start-up plan. every run is a cited, exportable record.
                   </p>
                   <div class="starters">
                     <button
@@ -520,7 +578,13 @@ watch(
                       <span class="starter-prompt">{{ starter.prompt }}</span>
                     </button>
                   </div>
-                  <p class="welcome-note mono">separate conversations — independent simulations</p>
+                  <div class="toolkit">
+                    <button v-for="tool in tools" :key="tool.page" class="tool-card" @click="navigate(tool.page)">
+                      <span class="glyph-link">{{ tool.title }}</span>
+                      <span class="tool-note">{{ tool.note }}</span>
+                    </button>
+                  </div>
+                  <p class="welcome-note mono">local-first · your key, your data · ⌘k to jump anywhere</p>
                 </BlurReveal>
               </div>
             </div>
@@ -637,8 +701,8 @@ watch(
               ></textarea>
               <div class="composer-toolbar mono">
                 <span v-if="checking" role="status">checking scope…</span>
-                <span v-else-if="research.settings.mode === 'openai'">sent to openai with your key · health scenarios only</span>
-                <span v-else>12 demo agents · health scenarios only</span>
+                <span v-else-if="research.settings.mode === 'openai'">sent to openai with your key · trial &amp; health scenarios only</span>
+                <span v-else>12 demo agents · trial &amp; health scenarios only</span>
                 <button
                   v-if="isRunning"
                   class="stop-btn mono"
@@ -703,6 +767,15 @@ watch(
             <CommandGroup v-if="!paletteTerm.trim()" heading="actions">
               <CommandItem value="new simulation" class="mono" @select="newChat">
                 new simulation
+              </CommandItem>
+              <CommandItem value="study build" class="mono" @select="navigate('build')">
+                study build
+              </CommandItem>
+              <CommandItem value="document preflight" class="mono" @select="navigate('preflight')">
+                document preflight
+              </CommandItem>
+              <CommandItem value="start-up timeline" class="mono" @select="navigate('timeline')">
+                start-up timeline
               </CommandItem>
             </CommandGroup>
             <CommandGroup heading="chats">

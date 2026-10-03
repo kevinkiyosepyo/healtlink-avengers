@@ -11,7 +11,7 @@ const props = defineProps({
 });
 
 const TUBES = 5;
-const colors = ["--kg-community", "--kg-provider", "--kg-policy", "--kg-media", "--kg-economy"];
+const colors = ["--kg-participant", "--kg-site", "--kg-oversight", "--kg-data", "--kg-sponsor"];
 const reducedMotion = prefersReducedMotion();
 
 // Each tube owns an equal slice of the run; fill 0–1 within its slice.

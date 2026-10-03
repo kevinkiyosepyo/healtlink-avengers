@@ -52,12 +52,18 @@ export async function createRecord({ runId, sessionId, sessionTitle, prompt, mod
   return { ...body, fingerprint: await sha256(canonicalJson(body)) };
 }
 
+/** Fingerprinted envelope for tool exports (preflight reports, timeline scenarios). */
+export async function createArtifact(kind, data, createdAt = new Date().toISOString()) {
+  const body = { schemaVersion: RECORD_SCHEMA_VERSION, kind, createdAt, app: "microfish", data };
+  return { ...body, fingerprint: await sha256(canonicalJson(body)) };
+}
+
 export async function verifyRecord(record) {
   const { fingerprint, ...body } = record;
   return fingerprint === (await sha256(canonicalJson(body)));
 }
 
-function csvCell(value) {
+export function csvCell(value) {
   const text = value === null || value === undefined ? "" : String(value);
   // Quote everything that needs it, and neutralize spreadsheet formula injection.
   const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;

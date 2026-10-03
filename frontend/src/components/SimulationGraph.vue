@@ -3,11 +3,11 @@ import { computed, markRaw, onBeforeUnmount, reactive, ref, useId, watch } from 
 import { VueFlow, useVueFlow } from "@vue-flow/core";
 import { Background } from "@vue-flow/background";
 import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } from "d3-force";
-import { Maximize2, Minus, Plus, X } from "@lucide/vue";
+import { Expand, Maximize2, Minus, Plus, Search, Shrink, X } from "@lucide/vue";
 import { useDebounceFn, useResizeObserver } from "@vueuse/core";
 import AgentNode from "./AgentNode.vue";
 import StatusBadge from "./StatusBadge.vue";
-import { AGENTS as agents, CATEGORIES as categories, RELATIONS as relations, STANCE_LEVELS, agentId } from "../lib/agents.js";
+import { AGENTS as agents, CATEGORIES as categories, RELATIONS as relations, STANCE_LEVELS, agentId, stanceColor } from "../lib/agents.js";
 
 const props = defineProps({
   run: { type: Object, default: null },
@@ -106,15 +106,45 @@ watch(reached, (now, before) => {
   }
 });
 
+// ---------- search & fullscreen ----------
+const query = ref("");
+const matches = computed(() => {
+  const term = query.value.trim().toLowerCase();
+  if (!term) return [];
+  return agents.map((agent, index) => ({ ...agent, id: ids[index], index })).filter((agent) => isVisible(agent.index) && agent.label.toLowerCase().includes(term));
+});
+watch(matches, (list) => {
+  hoveredId.value = list[0]?.id ?? null;
+});
+function searchKeydown(event) {
+  if (event.key === "Enter" && matches.value[0]) {
+    selectNode(matches.value[0].id);
+    query.value = "";
+  } else if (event.key === "Escape") {
+    query.value = "";
+    selectedId.value = null;
+  }
+}
+const root = ref(null);
+const fullscreen = ref(false);
+async function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await root.value?.requestFullscreen();
+  } catch {
+    /* fullscreen not allowed (e.g. iframe) */
+  }
+}
+function onFullscreenChange() {
+  fullscreen.value = document.fullscreenElement === root.value;
+}
+document.addEventListener("fullscreenchange", onFullscreenChange);
+onBeforeUnmount(() => document.removeEventListener("fullscreenchange", onFullscreenChange));
+
 // ---------- stance coloring ----------
 const hasStances = computed(() => Boolean(props.stances && Object.keys(props.stances).length));
 const colorMode = ref("category");
 watch(hasStances, (has) => (colorMode.value = has ? "stance" : "category"), { immediate: true });
-// Diverging, muted: opposed (dusty rose) → neutral (warm grey) → supportive (sage).
-function stanceColor(score) {
-  if (score < 2) return `color-mix(in oklab, var(--stance-opposed) ${Math.round(((2 - score) / 2) * 100)}%, var(--stance-neutral))`;
-  return `color-mix(in oklab, var(--stance-supportive) ${Math.round(((score - 2) / 2) * 100)}%, var(--stance-neutral))`;
-}
 function stanceFor(index) {
   return hasStances.value ? props.stances[ids[index]] ?? null : null;
 }
@@ -227,7 +257,7 @@ const stateLabel = { idle: "not reached", running: "active", done: "explored", s
 </script>
 
 <template>
-  <section class="sim-graph" :aria-labelledby="`${flowId}-title`">
+  <section ref="root" class="sim-graph" :aria-labelledby="`${flowId}-title`" @keydown.esc="selectedId = null">
     <header class="graph-head">
       <div class="graph-head-left">
         <h2 :id="`${flowId}-title`" class="mono">knowledge graph</h2>
@@ -283,10 +313,26 @@ const stateLabel = { idle: "not reached", running: "active", done: "explored", s
         </template>
       </div>
 
+      <div class="kg-search">
+        <Search :size="13" aria-hidden="true" />
+        <input
+          v-model="query"
+          class="mono"
+          type="search"
+          placeholder="find stakeholder"
+          aria-label="Find a stakeholder"
+          @keydown="searchKeydown"
+        />
+        <span v-if="query" class="mono kg-search-count">{{ matches.length ? `${matches.length} · enter` : "none" }}</span>
+      </div>
+
       <div class="kg-controls" role="group" aria-label="Zoom">
         <button class="icon-btn" aria-label="Zoom in" @click="zoomIn({ duration: 200 })"><Plus :size="14" /></button>
         <button class="icon-btn" aria-label="Zoom out" @click="zoomOut({ duration: 200 })"><Minus :size="14" /></button>
         <button class="icon-btn" aria-label="Fit graph" @click="fitView({ padding: 0.2, duration: 300 })"><Maximize2 :size="13" /></button>
+        <button class="icon-btn" :aria-label="fullscreen ? 'Exit fullscreen' : 'Fullscreen'" @click="toggleFullscreen">
+          <Shrink v-if="fullscreen" :size="13" /><Expand v-else :size="13" />
+        </button>
       </div>
 
       <Transition name="panel">
@@ -381,7 +427,7 @@ const stateLabel = { idle: "not reached", running: "active", done: "explored", s
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  max-width: calc(100% - 120px);
+  max-width: calc(100% - 300px);
 }
 .kg-chip {
   display: inline-flex;
@@ -451,6 +497,41 @@ const stateLabel = { idle: "not reached", running: "active", done: "explored", s
   width: 8px;
   height: 8px;
   border-radius: 999px;
+}
+
+.kg-search {
+  position: absolute;
+  top: 12px;
+  right: 52px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--faint);
+}
+.kg-search input {
+  width: 130px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 11.5px;
+}
+.kg-search:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hairline));
+}
+.kg-search-count {
+  color: var(--faint);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.sim-graph:fullscreen {
+  background: var(--canvas);
 }
 
 /* zoom controls */

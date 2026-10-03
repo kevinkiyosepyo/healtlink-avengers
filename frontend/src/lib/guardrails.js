@@ -19,7 +19,7 @@ export const BLOCK_REASONS = {
     "microfish simulates community-level scenarios and can't give personal diagnosis, dosing or treatment advice. please talk to a clinician.",
   crisis:
     "it sounds like you or someone else may be in danger. in the US, call or text 988 (suicide & crisis lifeline) or call 911 for emergencies.",
-  off_topic: "microfish only simulates healthcare and public-health scenarios. try rephrasing around a health service, clinic, or community health question.",
+  off_topic: "microfish rehearses clinical-trial and healthcare scenarios only. try a protocol change, recruitment or retention question, or a site-operations scenario.",
   unsafe: "this request falls outside what microfish can simulate safely.",
   controversial:
     "microfish avoids partisan, religious or culture-war framings. try asking about the practical health impact instead.",
@@ -88,7 +88,7 @@ export function screenPrompt(raw) {
 // Keyword topic check for demo mode (no model available), so the
 // "healthcare scenarios only" rule still holds without one.
 const HEALTH_TERMS =
-  /\b(?:health|healthcare|clinic|clinics|hospital|patients?|medical|medicine|medication|pharmac(?:y|ies|ist)|doctors?|nurses?|physicians?|care(?:givers?)?|appointments?|vaccin\w*|immuni[sz]\w*|disease|illness|treatment|therap\w*|mental|wellness|insur\w*|medicaid|medicare|telehealth|screening|prevention|chronic|diabetes|asthma|maternal|prenatal|public health|outbreak|epidemic|pandemic|emergency room|er visits?|urgent care|dental|vision|nutrition|elderly|seniors?|flu|shots?|paramedics?|ambulances?|ems|prescri\w*|painkillers?|symptoms?|surger(?:y|ies)|clinicians?|covid\w*|hiv|opioids?|addiction|substance use|overdoses?|blood|poisoning|wait times?)\b/i;
+  /\b(?:health|healthcare|clinic|clinics|hospital|patients?|medical|medicine|medication|pharmac(?:y|ies|ist)|doctors?|nurses?|physicians?|care(?:givers?)?|appointments?|vaccin\w*|immuni[sz]\w*|disease|illness|treatment|therap\w*|mental|wellness|insur\w*|medicaid|medicare|telehealth|screening|prevention|chronic|diabetes|asthma|maternal|prenatal|public health|outbreak|epidemic|pandemic|emergency room|er visits?|urgent care|dental|vision|nutrition|elderly|seniors?|flu|shots?|paramedics?|ambulances?|ems|prescri\w*|painkillers?|symptoms?|surger(?:y|ies)|clinicians?|covid\w*|hiv|opioids?|addiction|substance use|overdoses?|blood|poisoning|wait times?|trials?|protocols?|consent|e-?consent|enrol(?:l)?(?:ment|ing|ed)?|recruit\w*|retention|dropouts?|participants?|investigators?|sites?|irb|ethics board|sponsors?|cro|monitor(?:ing|s)?|adverse events?|endpoints?|randomi[sz]\w*|placebo|cohorts?|case report forms?|crfs?|edc|visits?|amendments?)\b/i;
 
 export function isHealthTopic(raw) {
   return HEALTH_TERMS.test(normalizePrompt(raw));
