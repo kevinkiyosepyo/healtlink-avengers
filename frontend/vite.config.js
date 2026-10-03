@@ -7,5 +7,9 @@ export default defineConfig({
   plugins: [vue(), tailwindcss()],
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) }
+  },
+  server: {
+    // The Express backend (backend/) owns /api; see backend/src/app.js.
+    proxy: { '/api': 'http://localhost:8787' }
   }
 })

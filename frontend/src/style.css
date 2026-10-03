@@ -26,6 +26,9 @@
   --kg-media: #a88ba5;
   --kg-economy: #a8937c;
   --kg-edge: #3a3733;
+  --stance-opposed: #b97a72;
+  --stance-neutral: #8e8b82;
+  --stance-supportive: #8fa68a;
   --overlay-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --glyph-return: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 12' fill='none' stroke='black' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 1v7h9'/%3E%3Cpath d='M9 5.5l2.5 2.5L9 10.5'/%3E%3C/svg%3E");
@@ -72,6 +75,9 @@
     --kg-media: #86607f;
     --kg-economy: #85705a;
     --kg-edge: #d6cdc2;
+    --stance-opposed: #9c5a51;
+    --stance-neutral: #8e8b82;
+    --stance-supportive: #5f7d5a;
     --overlay-shadow: 0 12px 32px rgba(20, 20, 19, 0.12);
     color-scheme: light;
   }
@@ -153,30 +159,42 @@
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+/* Small status dot; matches StatusBadge (Vercel-style halo, ripple when running). */
 .dot {
+  --tone: var(--faint);
+  position: relative;
   width: 6px;
   height: 6px;
   flex-shrink: 0;
   border-radius: 999px;
-  background: var(--faint);
+  background: var(--tone);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--tone) 16%, transparent);
 }
 .dot.running {
-  background: var(--accent);
-  animation: dot-pulse 1.6s var(--ease) infinite;
+  --tone: var(--accent);
+}
+.dot.running::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--tone);
+  animation: dot-ripple 1.8s var(--ease) infinite;
 }
 .dot.completed {
-  background: var(--teal);
+  --tone: var(--teal);
 }
 .dot.stopped {
-  background: var(--muted);
+  --tone: var(--muted);
 }
-@keyframes dot-pulse {
-  0%,
-  100% {
-    opacity: 1;
+@keyframes dot-ripple {
+  from {
+    opacity: 0.55;
+    transform: scale(1);
   }
-  50% {
-    opacity: 0.4;
+  to {
+    opacity: 0;
+    transform: scale(2.6);
   }
 }
 .pill {
@@ -684,8 +702,7 @@
 }
 .run-head .pct {
   margin-left: auto;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
+  color: var(--faint);
 }
 .progress {
   height: 2px;
@@ -889,7 +906,7 @@
     padding: 0 16px;
   }
   .composer-hints .keys,
-  .topbar .demo-pill {
+  .topbar .mode-chip {
     display: none;
   }
 }
@@ -990,4 +1007,13 @@
   padding: 8px 12px;
   border-top: 1px solid var(--hairline);
   color: var(--faint);
+}
+.mode-chip {
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+}
+.mode-chip:hover .status {
+  border-color: color-mix(in srgb, var(--muted) 40%, var(--hairline));
 }

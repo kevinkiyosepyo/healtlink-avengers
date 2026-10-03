@@ -15,7 +15,7 @@ defineProps({
     ]"
     :style="{
       '--size': `${data.radius * 2}px`,
-      '--cat': `var(--kg-${data.category})`,
+      '--cat': data.color ?? `var(--kg-${data.category})`,
       '--stagger': `${data.index * 140}ms`,
     }"
   >

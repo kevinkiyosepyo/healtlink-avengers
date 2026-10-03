@@ -61,11 +61,17 @@ No shadows in-app. Depth = surface step + hairline (`canvas → surface → surf
 - **Links:** prefixed with `⮡` in mono, `--muted`. On hover the glyph shifts 2px right/down and the text goes `--ink`. Used for: follow-up suggestions, "open in graph", docs, source links.
 - **Composer:** `surface-raised`, hairline, 12px radius, autosizing textarea, mono hint row below (`enter to run · shift+enter for newline`). Send is a 32px accent icon button. While running it becomes `stop` (danger ghost).
 - **Message blocks:** no bubbles. User = `--ink`, right-aligned mono label `you`. Model/run output = `--body`, left, with a mono run header `run 02 · 24s · 12 agents`. Hairline between runs.
-- **Run header / status badge:** mono, 11px, pill, hairline border; running state has a 6px `--accent` dot that pulses (opacity .4↔1, 1.6s).
+- **Status signature** (`StatusBadge`, modeled on Vercel's deployment states): 8px dot with a soft 3px halo in the state's tone, sans 12.5px label, then mono metadata separated by faint middots, e.g. `● running · 42% · 8s`, `● ready · 24s · 12 agents`, `● stopped · at 61% · 14s`. Running ripples the halo outward (no blinking). Draft is a hollow ring. Tones: running = accent, ready = teal, stopped = muted, blocked = danger. Chip variant (hairline border, `surface` fill) for the topbar and graph header; small variant in sidebar rows.
+- **Sample rack (loading):** while a run is active, five sample tubes fill in sequence with progress in the muted `--kg-*` colors, with bubbles in the active tube. A small coral "sus" microfish (an original character) peeks over the rack every 3.5–9s, glances around and ducks back. There's no peeking under reduced motion.
 - **View switcher** (chat / graph / split): mono segmented control, lowercase, 28px, active = `surface-hover` + `--ink`.
 - **Dialogs and menus:** `surface-raised`, hairline, 12px radius, 150ms fade+scale(.98→1).
 - **Toasts and notices** (storage warning, capacity): hairline box, mono prefix `note —`, `--amber` for warnings.
 - **Focus:** 2px `--accent` ring at 2px offset, always visible on keyboard focus.
+
+## 6b. Researcher surfaces
+- **Mode chip** (topbar, chip `StatusBadge`): `demo · 12 agents` or `openai · <model>`. It opens **model & data**.
+- **model & data dialog:** mode segmented control; key field (password, show/hide, verify with status badge, "remember for this tab only"); model select populated from the key's models; temperature/seed; a plain-language "where your data goes" list; record count and storage persistence; export all (csv/json); two-step "delete all local data".
+- **Analysis panel** (under each run): status badge (`analyzing` → `analysis ready · 0.9s · model` / `out of scope` / `analysis failed` with retry); summary strip (supportive/neutral/opposed counts, mean /4); a dense stakeholder table (category dot, 5-step stance scale, label, confidence, expandable "why"); assumptions and caveats; an honesty note; a collapsible mono provenance list with the record fingerprint and copy; actions: re-run fresh, csv, json. Demo runs show a one-line "record saved" strip.
 
 ## 7. Graph view: knowledge graph (Vue Flow + d3-force)
 - Canvas `--canvas` with a faint dot grid. Layout comes from d3-force (link, charge, collide, center). Dragging a node pins it while neighbors follow, and on release it settles back.
@@ -77,7 +83,8 @@ No shadows in-app. Depth = surface step + hairline (`canvas → surface → surf
   - *stopped:* fades to 45% over 400ms.
 - **Edges:** straight, 1px `--kg-edge`. Edges between reached nodes get stronger, and while running they show a slow coral dash flow. Relation labels ("reports to", "bills") appear in mono only on the focused node's edges.
 - **Interaction:** hover highlights the neighborhood and dims the rest to 18%. Click selects, centers the view and opens a detail panel listing relations (each one jumps to that agent). Legend chips filter categories. Zoom in/out/fit controls sit top-right. The graph re-fits on pane resize.
-- Labelled honestly: the footer keeps `illustrative topology — not model output`.
+- **Stance mode:** when an OpenAI analysis exists for a run, a `category | stance` toggle appears. Stance colors run opposed (`--stance-opposed`, dusty rose) → neutral (warm grey) → supportive (sage), mixed in oklab. The detail panel shows the likely stance, score/4 and confidence.
+- Labelled honestly: the footer keeps `illustrative topology — not model output`, or `stances estimated by <model> — verify before use`.
 
 ## 8. Motion
 Principle: quick and purposeful, transform and opacity only. Easing `cubic-bezier(.2,.7,.2,1)`; durations 120ms (hover), 200ms (UI), 400–700ms (page-level). Everything respects `prefers-reduced-motion` (disable pulses, split-letter boot, parallax; keep opacity fades).
