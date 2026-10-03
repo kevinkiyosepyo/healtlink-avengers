@@ -3,6 +3,9 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import AppIcon from "./components/AppIcon.vue";
 import SimulationGraph from "./components/SimulationGraph.vue";
 import BottleneckTimeline from "./components/BottleneckTimeline.vue";
+import DocumentPreflight from "./components/DocumentPreflight.vue";
+import ResearcherLogin from "./components/ResearcherLogin.vue";
+import { useResearcherAccount } from "./composables/useResearcherAccount.js";
 import { useSimulationWorkspace } from "./composables/useSimulationWorkspace.js";
 import { PROMPT_LIMIT, TITLE_LIMIT } from "./lib/simulationWorkspace.js";
 
@@ -17,21 +20,39 @@ const {
   renameSession,
   deleteSession,
   startRun,
+  startOpenAIRun,
   stopRun,
 } = useSimulationWorkspace();
+const { account, busy: accountBusy, error: accountError, ready: providerReady, google, chatgpt, connect, disconnect, signout } = useResearcherAccount();
+const runMode = ref("demo");
+const loginPage = ref(null);
+function enterWorkspace(mode) {
+  runMode.value = mode;
+  navigate("simulations");
+}
+watch(providerReady, (ready) => {
+  if (ready) runMode.value = "openai";
+  else {
+    for (const session of sessions.value) {
+      if (session.runs.some(run => run.mode === "openai" && run.status === "running")) stopRun(session.id);
+    }
+  }
+});
 const activeView = ref("Chat");
 function pageFromHash() {
-  return ({ "#/timeline": "timeline" })[window.location.hash] || "simulations";
+  const hash = window.location.hash.split("?")[0];
+  return ({ "#/timeline": "timeline", "#/preflight": "preflight", "#/login": "login", "#/simulations": "simulations" })[hash] || "login";
 }
 const currentPage = ref(pageFromHash());
 const timelinePage = ref(null);
+const preflightPage = ref(null);
 function syncPage() {
   currentPage.value = pageFromHash();
   sidebarOpen.value = false;
   menuId.value = null;
 }
 function navigate(page) {
-  window.location.hash = ({ timeline: "/timeline" })[page] || "/simulations";
+  window.location.hash = ({ timeline: "/timeline", preflight: "/preflight", login: "/login" })[page] || "/simulations";
   currentPage.value = page;
   sidebarOpen.value = false;
   menuId.value = null;
@@ -41,6 +62,8 @@ onUnmounted(() => window.removeEventListener("hashchange", syncPage));
 watch(currentPage, async (page) => {
   await nextTick();
   if (page === "timeline") timelinePage.value?.focusHeading();
+  else if (page === "preflight") preflightPage.value?.focusHeading();
+  else if (page === "login") loginPage.value?.focusHeading();
   else composer.value?.focus();
 });
 const search = ref("");
@@ -154,6 +177,7 @@ function statusLabel(status) {
       running: "Running",
       completed: "Completed",
       stopped: "Stopped",
+      failed: "Failed",
       draft: "Draft",
     }[status] || "Draft"
   );
@@ -185,7 +209,11 @@ async function useStarter(prompt) {
 }
 function submitRun() {
   if (!canSubmit.value) return;
-  const run = startRun(activeId.value, activeSession.value.draft);
+  if (runMode.value === "openai" && !providerReady.value) {
+    navigate("login");
+    return;
+  }
+  const run = (runMode.value === "openai" ? startOpenAIRun : startRun)(activeId.value, activeSession.value.draft);
   submitError.value = run
     ? ""
     : "This run could not start. Check the workspace notice and try again.";
@@ -245,7 +273,22 @@ watch(
 </script>
 
 <template>
+  <ResearcherLogin
+    v-if="currentPage === 'login'"
+    ref="loginPage"
+    :account="account"
+    :busy="accountBusy"
+    :error="accountError"
+    @google="google"
+    @chatgpt="chatgpt"
+    @connect="connect"
+    @disconnect="disconnect"
+    @signout="signout"
+    @continue="enterWorkspace('openai')"
+    @demo="enterWorkspace('demo')"
+  />
   <div
+    v-else
     class="app-shell"
     @click="menuId = null"
     @keydown.esc="
@@ -294,6 +337,16 @@ watch(
         >
           <AppIcon name="timeline" :size="18" />
           <span>Bottleneck timeline</span>
+          <AppIcon class="workspace-nav-arrow" name="arrow-up-right" :size="15" />
+        </button>
+        <button
+          class="workspace-nav-button"
+          :class="{ active: currentPage === 'preflight' }"
+          :aria-current="currentPage === 'preflight' ? 'page' : undefined"
+          @click="navigate('preflight')"
+        >
+          <AppIcon name="document-check" :size="18" />
+          <span>Document preflight</span>
           <AppIcon class="workspace-nav-arrow" name="arrow-up-right" :size="15" />
         </button>
       </nav>
@@ -359,7 +412,7 @@ watch(
         </div>
       </nav>
       <div class="sidebar-bottom">
-        <div class="parallel-notice">
+        <div v-if="runningCount" class="parallel-notice">
           <span class="parallel-icon"
             ><AppIcon name="layers" :size="18"
           /></span>
@@ -378,13 +431,13 @@ watch(
             </p>
           </div>
         </div>
-        <div class="workspace-identity">
-          <span class="workspace-avatar">M</span>
+        <button class="workspace-identity account-button" @click="navigate('login')">
+          <span class="workspace-avatar">{{ account.user?.name?.charAt(0) || 'M' }}</span>
           <div>
-            <strong>My workspace</strong><span>Saved on this device</span>
+            <strong>{{ account.user?.name || 'Researcher sign-in' }}</strong><span>{{ account.user ? 'Account & AI connection' : 'Google or ChatGPT' }}</span>
           </div>
           <AppIcon name="lock" :size="15" />
-        </div>
+        </button>
       </div>
     </aside>
     <div class="main-shell" :inert="sidebarOpen && isMobile">
@@ -401,16 +454,17 @@ watch(
             <AppIcon name="sidebar" /></button
           ><span class="breadcrumb-parent">Workspace</span
           ><span class="breadcrumb-divider">/</span
-          ><span class="current-title">{{ currentPage === 'timeline' ? 'Bottleneck timeline' : activeSession?.title }}</span>
+          ><span class="current-title">{{ currentPage === 'timeline' ? 'Bottleneck timeline' : currentPage === 'preflight' ? 'Document preflight' : activeSession?.title }}</span>
         </div>
         <div class="header-status">
           <span v-if="runningCount" class="running-badge" role="status"
             ><span class="status-dot running"></span
             >{{ runningCount }} running</span
-          ><span class="demo-badge"><span></span>Demo mode</span>
+          ><button class="demo-badge account-status" @click="navigate('login')"><span></span>{{ runMode === 'openai' ? (providerReady ? 'OpenAI connected' : 'Reconnect OpenAI') : 'Demo mode' }}</button>
         </div>
       </header>
       <BottleneckTimeline ref="timelinePage" v-show="currentPage === 'timeline'" />
+      <DocumentPreflight ref="preflightPage" v-show="currentPage === 'preflight'" />
       <main v-if="activeSession" v-show="currentPage === 'simulations'" class="workspace">
         <div class="workspace-toolbar">
           <div class="workspace-heading">
@@ -447,17 +501,12 @@ watch(
             <div ref="messageList" class="message-scroll">
               <div v-if="!activeSession.messages.length" class="welcome">
                 <div class="welcome-emblem">
-                  <AppIcon name="fish" :size="43" /><span
-                    class="emblem-dot"
-                  ></span>
+                  <AppIcon name="fish" :size="38" />
                 </div>
-                <p class="eyebrow">
-                  A LITTLE CURIOSITY. A WORLD OF POSSIBILITIES.
-                </p>
-                <h1>One question.<br />Many possible futures.</h1>
+                <h1>Explore your next what-if.</h1>
                 <p class="welcome-copy">
-                  Give your next what-if a space of its own.<br />Explore a
-                  scenario, then start another alongside it.
+                  Compare scenarios, follow the connections, and uncover questions
+                  to explore before your next study.
                 </p>
                 <div class="starter-grid">
                   <button
@@ -476,11 +525,6 @@ watch(
                       :size="16"
                     />
                   </button>
-                </div>
-                <div class="welcome-note">
-                  <AppIcon name="layers" :size="15" /><span
-                    >Separate conversations. Independent simulations.</span
-                  >
                 </div>
               </div>
               <div v-else class="messages">
@@ -509,7 +553,7 @@ watch(
                       v-if="message.role === 'assistant'"
                       class="assistant-name"
                     >
-                      Microfish <span>DEMO</span>
+                      Microfish <span>{{ runForMessage(message)?.mode === 'openai' ? 'OPENAI' : 'DEMO' }}</span>
                     </div>
                     <p class="message-text">{{ message.content }}</p>
                     <template
@@ -537,25 +581,27 @@ watch(
                               runForMessage(message).status === "running"
                                 ? "Exploring your scenario"
                                 : runForMessage(message).status === "completed"
-                                  ? "Demo run complete"
-                                  : "Demo run stopped"
+                                  ? (runForMessage(message).mode === 'openai' ? 'AI exploration complete' : 'Demo run complete')
+                                  : runForMessage(message).status === 'failed' ? 'Run could not complete' : 'Run stopped'
                             }}</strong
                             ><span
-                              >Local demo ·
+                              >{{ runForMessage(message).mode === 'openai' ? 'OpenAI ·' : 'Local demo ·' }}
                               {{ runForMessage(message).agentCount }}
-                              illustrative agents</span
+                              {{ runForMessage(message).mode === 'openai' ? 'research perspectives' : 'illustrative agents' }}</span
                             >
                           </div>
                           <span class="run-percentage"
+                            v-if="runForMessage(message).mode !== 'openai' || runForMessage(message).status === 'completed'"
                             >{{
                               Math.round(runForMessage(message).progress)
                             }}%</span
                           >
                         </div>
                         <div
+                          v-if="runForMessage(message).mode !== 'openai' || runForMessage(message).status === 'completed'"
                           class="progress-track"
                           role="progressbar"
-                          :aria-label="`Demo progress for ${runForMessage(message).prompt}`"
+                          :aria-label="`Run progress for ${runForMessage(message).prompt}`"
                           :aria-valuenow="
                             Math.round(runForMessage(message).progress)
                           "
@@ -571,7 +617,7 @@ watch(
                         <div class="run-card-footer">
                           <span>{{ runForMessage(message).stage }}</span
                           ><button
-                            v-if="runForMessage(message).id === latestRun?.id"
+                            v-if="runForMessage(message).id === latestRun?.id && runForMessage(message).mode !== 'openai'"
                             @click="activeView = 'Split'"
                           >
                             View graph
@@ -585,7 +631,7 @@ watch(
             </div>
             <div class="composer-area">
               <div v-if="isRunning" class="background-hint" role="status">
-                <span class="status-dot running"></span>This demo keeps running
+                <span class="status-dot running"></span>This run keeps running
                 when you switch chats.
               </div>
               <form class="composer" @submit.prevent="submitRun">
@@ -599,7 +645,7 @@ watch(
                   rows="3"
                   :placeholder="
                     isRunning
-                      ? 'Draft your next question while this demo runs…'
+                      ? 'Draft your next question while this run finishes…'
                       : activeSession.messages.length
                         ? 'Ask a follow-up or explore another possibility…'
                         : 'What would you like to simulate?'
@@ -607,24 +653,27 @@ watch(
                   @keydown="composerKeydown"
                 ></textarea>
                 <div class="composer-toolbar">
-                  <span class="composer-meta"
-                    ><AppIcon name="spark" :size="15" /><span
-                      >12 demo agents</span
-                    ></span
-                  ><button
+                  <label class="composer-meta run-mode-select">
+                    <AppIcon name="spark" :size="15" />
+                    <span class="sr-only">Simulation provider</span>
+                    <select v-model="runMode" :disabled="isRunning">
+                      <option value="demo">12 demo agents</option>
+                      <option value="openai">OpenAI · 3 perspectives</option>
+                    </select>
+                  </label><button
                     v-if="isRunning"
                     class="stop-button"
                     type="button"
                     @click="stopRun(activeId)"
                   >
-                    <AppIcon name="stop" :size="13" />Stop demo</button
+                    <AppIcon name="stop" :size="13" />{{ latestRun?.mode === 'openai' ? 'Stop waiting' : 'Stop run' }}</button
                   ><button
                     v-else
                     class="send-button"
                     type="submit"
                     :disabled="!canSubmit"
                   >
-                    <span>Run simulation</span
+                    <span>{{ runMode === 'openai' && !providerReady ? 'Connect to run' : 'Run simulation' }}</span
                     ><AppIcon name="arrow-up" :size="17" />
                   </button>
                 </div>
@@ -633,8 +682,8 @@ watch(
                 {{ submitError }}
               </p>
               <p class="composer-disclaimer">
-                Demo runs show the workflow. Connect a simulation engine for
-                real results.
+                {{ runMode === 'openai' ? 'AI explorations are hypotheses, not research findings. API usage is billed to your OpenAI account.' : 'Demo runs show the workflow. Choose OpenAI for an AI exploration.' }}
+                Chats are saved on this device.
               </p>
             </div>
           </section>
@@ -644,9 +693,17 @@ watch(
             aria-label="Simulation graph"
           >
             <SimulationGraph
+              v-if="latestRun?.mode !== 'openai'"
+              :key="activeId"
               :run="latestRun"
               :session-title="activeSession.title"
             />
+            <div v-else class="ai-graph-note">
+              <AppIcon name="spark" :size="28" />
+              <h2>Read the research perspectives</h2>
+              <p>OpenAI responses are available in the chat. The illustrative demo graph does not represent these AI runs.</p>
+              <button class="secondary-button" @click="activeView = 'Chat'">View AI responses</button>
+            </div>
             <div v-if="activeView === 'Graph'" class="graph-actions">
               <button class="secondary-button" @click="activeView = 'Chat'">
                 <AppIcon name="chat" :size="16" />Back to chat</button
@@ -655,7 +712,7 @@ watch(
                 class="stop-button"
                 @click="stopRun(activeId)"
               >
-                <AppIcon name="stop" :size="13" />Stop demo
+                <AppIcon name="stop" :size="13" />{{ latestRun?.mode === 'openai' ? 'Stop waiting' : 'Stop run' }}
               </button>
             </div>
           </section>
@@ -696,7 +753,7 @@ watch(
           “{{ dialogSession?.title }}” and its conversation will be removed from
           this device.{{
             dialogSession && sessionStatus(dialogSession) === "running"
-              ? " Its running demo will also stop."
+              ? (dialogSession.runs.at(-1)?.mode === 'openai' ? " We will stop waiting for its AI response. Requests already sent may still incur API usage." : " Its running simulation will also stop.")
               : ""
           }}
         </p>

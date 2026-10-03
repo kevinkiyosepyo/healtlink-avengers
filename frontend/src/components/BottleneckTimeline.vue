@@ -55,7 +55,7 @@ const detail = computed(() => {
     return "Select a task and add a delay to explore how the rest of the plan responds.";
   if (!schedule.value.shift)
     return "Your parallel work absorbs the added time. The final handoff date stays on track.";
-  return `The handoff moves ${schedule.value.shift} working ${schedule.value.shift === 1 ? "day" : "days"} later. Follow the amber tasks to see where the delay travels.`;
+  return `The handoff moves ${schedule.value.shift} working ${schedule.value.shift === 1 ? "day" : "days"} later. Follow the tasks marked “Delayed” to see where the extra time travels.`;
 });
 function setDelay(value) {
   const parsed = Number(value);
@@ -72,7 +72,10 @@ function resetScenario() {
 async function selectTask(id) {
   selectedId.value = id;
   await nextTick();
-  if (window.innerWidth <= 1190) {
+  const board = taskDetail.value?.previousElementSibling;
+  const detailsBelowChart = board &&
+    taskDetail.value.getBoundingClientRect().top >= board.getBoundingClientRect().bottom;
+  if (detailsBelowChart) {
     taskDetail.value?.scrollIntoView({
       behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
         ? "instant"
@@ -142,7 +145,7 @@ defineExpose({ focusHeading: () => heading.value?.focus() });
     <div class="timeline-page-inner">
       <div class="timeline-page-heading">
         <div>
-          <p class="timeline-eyebrow"><span></span> PLAN AHEAD, MOVE FORWARD</p>
+          <p class="timeline-eyebrow">Research planning</p>
           <h1 id="timeline-heading" ref="heading" tabindex="-1">
             Bottleneck timeline
           </h1>
@@ -245,11 +248,11 @@ defineExpose({ focusHeading: () => heading.value?.focus() });
             <div
               class="gantt"
               :style="{
-                minWidth: `${220 + dayCount * 34}px`,
+                minWidth: `calc(var(--task-label-width) + ${dayCount * 2.5}rem)`,
                 '--day-width': `${100 / dayCount}%`,
               }"
             >
-              <div class="gantt-axis">
+              <div class="gantt-axis" aria-hidden="true">
                 <div class="gantt-label">TASK / OWNER</div>
                 <div class="gantt-weeks">
                   <span
@@ -261,7 +264,7 @@ defineExpose({ focusHeading: () => heading.value?.focus() });
                 </div>
               </div>
               <button
-                v-for="(task, index) in schedule.tasks"
+                v-for="task in schedule.tasks"
                 :key="task.id"
                 class="gantt-row"
                 :class="{
@@ -270,22 +273,18 @@ defineExpose({ focusHeading: () => heading.value?.focus() });
                 }"
                 :aria-pressed="selectedId === task.id"
                 aria-controls="timeline-task-detail"
-                :aria-label="`${task.title}, starts ${date(task.start)}, ready from ${date(task.end)}${task.affected ? `, ${task.shift} working days later` : ''}. View task details.`"
+                :aria-label="`${task.title}, ${task.owner}, starts ${date(task.start)}, ready from ${date(task.end)}, ${task.duration + task.delay} working days${task.affected ? `, affected by delay, ${task.shift} working days later` : ''}. View task details.`"
                 @click="selectTask(task.id)"
               >
-                <span class="gantt-label task-label"
-                  ><span class="task-number">{{
-                    String(index + 1).padStart(2, "0")
-                  }}</span
-                  ><span
-                    ><strong>{{ task.title }}</strong
-                    ><small>{{ task.owner }}</small></span
-                  ><span
-                    v-if="task.delay"
-                    class="task-delay-dot"
-                    title="Added delay"
-                  ></span
-                ></span>
+                <span class="gantt-label task-label">
+                  <span>
+                    <strong>{{ task.title }}</strong>
+                    <small>{{ task.owner }}</small>
+                    <small v-if="task.affected" class="task-delay-label">
+                      Delayed<span v-if="task.shift"> · +{{ task.shift }}d</span>
+                    </small>
+                  </span>
+                </span>
                 <span class="gantt-track">
                   <span
                     class="gantt-deadline"
@@ -304,7 +303,7 @@ defineExpose({ focusHeading: () => heading.value?.focus() });
                   >
                 </span>
               </button>
-              <div class="gantt-end">
+              <div class="gantt-end" aria-hidden="true">
                 <span class="gantt-label">WORKING DAYS</span
                 ><span class="gantt-day-labels"
                   ><span v-for="n in dayCount" :key="n">{{ n - 1 }}</span></span
@@ -456,376 +455,386 @@ defineExpose({ focusHeading: () => heading.value?.focus() });
 
 <style scoped>
 .timeline-page {
+  --task-label-width: 15rem;
+  container: timeline / inline-size;
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  background: #fafbf8;
+  background: var(--ui-canvas);
+  color: var(--ui-text);
+  font-size: 0.875rem;
+  line-height: 1.5;
 }
 .timeline-page-inner {
   max-width: 1600px;
   margin: 0 auto;
-  padding: 34px 34px 24px;
+  padding: 2.25rem clamp(1rem, 3vw, 2.5rem) 2rem;
 }
 .timeline-page-heading {
   display: flex;
   justify-content: space-between;
-  gap: 24px;
+  gap: 1.5rem;
   align-items: center;
-  margin-bottom: 26px;
+  flex-wrap: wrap;
+  margin-bottom: 1.75rem;
+}
+.timeline-page-heading > div {
+  flex: 1 1 22rem;
+  min-width: 0;
 }
 .timeline-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  color: #6c7d61;
-  font-size: 9px;
-  letter-spacing: 1.5px;
+  color: var(--ui-accent);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   font-weight: 650;
-  margin-bottom: 12px;
-}
-.timeline-eyebrow span {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #89a575;
+  margin-bottom: 0.625rem;
 }
 h1 {
   margin: 0;
-  color: #284d39;
-  font-size: clamp(25px, 2.3vw, 34px);
-  font-weight: 550;
-  letter-spacing: -1.1px;
-  line-height: 1.25;
-}
-h1:focus {
-  outline: none;
+  color: var(--ui-text);
+  font-size: clamp(1.75rem, 2.3vw, 2.125rem);
+  font-weight: 650;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
 }
 .timeline-intro {
-  color: #697664;
-  font-size: 12px;
-  margin: 10px 0 0;
-  line-height: 1.7;
+  color: var(--ui-muted);
+  font-size: 0.875rem;
+  margin: 0.75rem 0 0;
+  line-height: 1.65;
+  max-width: 44rem;
 }
 .timeline-reset {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  flex-shrink: 0;
-  border: 1px solid #dfe6d8;
-  border-radius: 7px;
-  background: #fff;
-  padding: 10px 13px;
-  font-size: 11px;
-  color: #52684b;
+  gap: 0.5rem;
+  min-height: 2.25rem;
+  border: 1px solid var(--ui-control-border);
+  border-radius: 0.625rem;
+  background: var(--ui-surface);
+  padding: 0.5rem 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 550;
+  color: var(--ui-text);
 }
 .timeline-reset:hover:not(:disabled) {
-  background: #edf3e7;
+  background: var(--ui-hover);
 }
 .timeline-reset:disabled {
-  opacity: 0.5;
+  color: var(--ui-muted);
+  background: var(--ui-surface-alt);
+  border-color: var(--ui-border);
 }
 .timeline-study {
   display: flex;
   align-items: center;
-  gap: 12px;
-  border: 1px solid #dfe7d7;
-  background: #f0f4ea;
-  border-radius: 9px;
-  padding: 15px 18px;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  border: 1px solid var(--ui-border);
+  background: var(--ui-surface-alt);
+  border-radius: 0.875rem;
+  padding: 1rem 1.125rem;
 }
 .study-symbol {
   display: grid;
   place-items: center;
-  color: #678156;
-  width: 35px;
-  height: 35px;
-  background: #e6eeda;
-  border-radius: 8px;
+  flex-shrink: 0;
+  color: var(--ui-accent);
+  width: 2.5rem;
+  height: 2.5rem;
+  background: var(--ui-surface);
+  border-radius: 0.625rem;
+}
+.timeline-study > div {
+  flex: 1 1 18rem;
+  min-width: 0;
 }
 .timeline-study strong {
-  font-size: 12px;
+  font-size: 0.875rem;
   font-weight: 600;
-  color: #3e5b35;
+  color: var(--ui-text);
 }
 .timeline-study strong span {
-  margin: 0 7px;
+  margin: 0 0.375rem;
   font-weight: 400;
-  color: #849179;
+  color: var(--ui-muted);
 }
 .timeline-study p {
-  font-size: 11px;
-  color: #6a7962;
-  margin: 5px 0 0;
-  line-height: 1.5;
+  font-size: 0.8125rem;
+  color: var(--ui-muted);
+  margin: 0.25rem 0 0;
+  line-height: 1.55;
 }
 .timeline-sample {
-  margin-left: auto;
-  flex-shrink: 0;
-  border: 1px solid #d9e2cd;
-  background: #f8faf4;
-  border-radius: 5px;
-  padding: 5px 8px;
-  font-size: 9px;
-  color: #617451;
+  border: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+  border-radius: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  color: var(--ui-muted);
 }
 .timeline-storage-notice {
-  font-size: 12px;
-  padding: 12px;
-  background: #fff7e8;
-  border-radius: 6px;
-  margin-top: 10px;
+  font-size: 0.875rem;
+  padding: 0.75rem;
+  color: var(--ui-warning);
+  background: var(--ui-warning-bg);
+  border: 1px solid var(--ui-warning);
+  border-radius: 0.625rem;
+  margin-top: 0.75rem;
 }
 .timeline-metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 13px;
-  margin: 20px 0 24px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  gap: 0;
+  margin: 1.5rem 0 1.75rem;
+  border-top: 1px solid var(--ui-border);
+  border-bottom: 1px solid var(--ui-border);
 }
 .timeline-metrics article {
-  border: 1px solid #e2e7dc;
-  background: #fff;
-  border-radius: 9px;
-  padding: 17px 18px;
+  min-width: 0;
+  padding: 1.125rem;
   display: flex;
   flex-direction: column;
 }
 .metric-label {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 10px;
-  color: #68775f;
-  margin-bottom: 14px;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--ui-muted);
+  margin-bottom: 0.625rem;
 }
 .timeline-metrics strong {
-  color: #35583f;
-  font-size: 25px;
-  letter-spacing: -0.8px;
-  font-weight: 550;
-  line-height: 1.2;
+  color: var(--ui-text);
+  font-size: 1.75rem;
+  letter-spacing: -0.035em;
+  font-weight: 600;
+  line-height: 1.25;
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   align-items: baseline;
+  font-variant-numeric: tabular-nums;
 }
 .timeline-metrics strong small {
-  font-size: 10px;
-  background: #fcf0da;
-  padding: 4px 5px;
-  color: #9a6a2f;
-  border-radius: 4px;
+  font-size: 0.75rem;
+  background: var(--ui-warning-bg);
+  padding: 0.25rem 0.375rem;
+  color: var(--ui-warning);
+  border-radius: 0.375rem;
   letter-spacing: 0;
 }
 .timeline-metrics strong .metric-total {
   background: none;
   padding: 0;
-  font-size: 17px;
-  color: #97a18e;
+  font-size: 1.125rem;
+  color: var(--ui-muted);
   font-weight: 400;
 }
 .timeline-metrics strong .metric-unit {
   background: none;
   padding: 0;
-  font-size: 10px;
-  color: #74806c;
+  font-size: 0.75rem;
+  color: var(--ui-muted);
   font-weight: 400;
 }
 .timeline-metrics article > span:last-child {
-  font-size: 9px;
-  color: #72806a;
-  margin-top: 8px;
+  font-size: 0.75rem;
+  color: var(--ui-muted);
+  margin-top: 0.5rem;
   line-height: 1.5;
 }
 .amber {
-  color: #a57032 !important;
+  color: var(--ui-warning) !important;
 }
 .timeline-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 290px;
-  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) minmax(17rem, 20rem);
+  gap: 1.25rem;
   align-items: start;
 }
 .timeline-board {
-  border: 1px solid #e1e7da;
-  background: #fff;
-  border-radius: 10px;
+  min-width: 0;
+  border: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+  border-radius: 1rem;
   overflow: hidden;
 }
 .timeline-board-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 21px 21px 15px;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 1.25rem 1.25rem 0.875rem;
 }
 h2 {
-  font-size: 14px;
+  font-size: 1rem;
   font-weight: 600;
-  letter-spacing: -0.2px;
+  letter-spacing: -0.02em;
   margin: 0;
-  color: #355139;
+  color: var(--ui-text);
 }
 .timeline-board-heading p {
-  font-size: 10px;
-  color: #76836e;
-  margin: 6px 0 0;
+  font-size: 0.75rem;
+  color: var(--ui-muted);
+  margin: 0.375rem 0 0;
 }
 .baseline-toggle {
   display: flex;
   align-items: center;
-  gap: 5px;
-  font-size: 10px;
-  color: #6d7a65;
-  white-space: nowrap;
+  gap: 0.5rem;
+  min-height: 2.25rem;
+  font-size: 0.8125rem;
+  color: var(--ui-text);
   cursor: pointer;
 }
 .baseline-toggle input {
-  accent-color: #6a8b56;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--ui-accent);
 }
 .timeline-legend {
-  padding: 0 21px 18px;
+  padding: 0 1.25rem 1.125rem;
   display: flex;
   flex-wrap: wrap;
-  gap: 13px;
-  font-size: 9px;
-  color: #72806c;
+  gap: 0.5rem 1rem;
+  font-size: 0.75rem;
+  color: var(--ui-muted);
 }
 .timeline-legend > span {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 0.375rem;
 }
 .timeline-legend i {
   display: inline-block;
-  width: 12px;
-  height: 7px;
-  border-radius: 2px;
+  flex-shrink: 0;
+  width: 1rem;
+  height: 0.625rem;
+  border-radius: 0.1875rem;
 }
 .legend-current {
-  background: #a9bf92;
+  background: var(--ui-accent);
 }
 .legend-shifted {
-  background: #d6b075;
+  background: repeating-linear-gradient(135deg, var(--ui-warning-bg) 0 3px, var(--ui-warning) 3px 4px);
+  border: 1px solid var(--ui-warning);
 }
 .legend-baseline {
-  border: 1px dashed #99a48c;
+  border: 1px dashed var(--ui-muted);
 }
 .legend-target {
-  margin-left: auto;
-  color: #8f7b5a;
+  color: var(--ui-warning);
 }
 .gantt-scroll {
   width: 100%;
   overflow-x: auto;
   scrollbar-width: thin;
-  scrollbar-color: #cdd8c3 transparent;
+  scrollbar-color: var(--ui-control-border) var(--ui-surface-alt);
 }
 .gantt-scroll:focus-visible {
-  outline: 2px solid #71965c;
-  outline-offset: -2px;
+  outline: 3px solid var(--ui-focus);
+  outline-offset: -3px;
 }
 .gantt-axis,
 .gantt-row,
 .gantt-end {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: var(--task-label-width) minmax(0, 1fr);
 }
 .gantt-axis {
-  background: #f8faf5;
-  border-top: 1px solid #e9ede4;
-  border-bottom: 1px solid #e9ede4;
+  background: var(--ui-surface-alt);
+  border-top: 1px solid var(--ui-border);
+  border-bottom: 1px solid var(--ui-border);
 }
 .gantt-label {
   position: sticky;
   left: 0;
   z-index: 2;
-  border-right: 1px solid #e6ecdf;
+  min-width: 0;
+  border-right: 1px solid var(--ui-border);
   text-align: left;
-  background: #fff;
+  background: var(--ui-surface);
 }
 .gantt-axis > .gantt-label,
 .gantt-end > .gantt-label {
-  padding: 20px;
-  color: #88917f;
-  font-size: 8px;
-  letter-spacing: 0.8px;
-  font-weight: 550;
-  background: #f8faf5;
+  display: flex;
+  align-items: center;
+  padding: 1rem;
+  color: var(--ui-muted);
+  font-size: 0.75rem;
+  letter-spacing: 0.035em;
+  font-weight: 600;
+  background: var(--ui-surface-alt);
 }
 .gantt-weeks {
   display: flex;
 }
 .gantt-weeks > span {
-  padding: 11px 12px;
-  font-size: 10px;
-  font-weight: 550;
-  color: #607653;
-  border-left: 1px solid #e8eddf;
+  padding: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ui-text);
+  border-left: 1px solid var(--ui-border);
 }
 .gantt-weeks small {
   display: block;
-  font-size: 7px;
-  letter-spacing: 0.5px;
+  font-size: 0.75rem;
   font-weight: 400;
-  margin-top: 5px;
-  color: #89957e;
+  margin-top: 0.25rem;
+  color: var(--ui-muted);
 }
 .gantt-row {
   width: 100%;
   border: 0;
-  border-bottom: 1px solid #edf0e8;
-  background: #fff;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-surface);
   padding: 0;
   text-align: left;
 }
 .gantt-row:hover,
 .gantt-row:hover .gantt-label {
-  background: #f7f9f3;
+  background: var(--ui-hover);
 }
 .gantt-row.is-selected,
 .gantt-row.is-selected .gantt-label {
-  background: #eff5e9;
+  background: var(--ui-selected);
 }
 .gantt-row.is-selected .gantt-label {
-  box-shadow: inset 3px 0 #7e9f64;
+  box-shadow: inset 3px 0 var(--ui-accent);
 }
 .gantt-row:focus-visible {
-  outline-offset: -2px;
+  outline-offset: -3px;
   position: relative;
   z-index: 3;
 }
 .task-label {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 67px;
-  padding: 10px 14px;
-}
-.task-number {
-  font-size: 9px;
-  color: #8f9b83;
-  font-variant-numeric: tabular-nums;
+  min-height: 5.25rem;
+  padding: 0.875rem 1rem;
 }
 .task-label strong {
   display: block;
-  font-size: 10px;
-  font-weight: 550;
-  color: #48603d;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ui-text);
   line-height: 1.4;
 }
 .task-label small {
   display: block;
-  font-size: 9px;
-  color: #829077;
-  margin-top: 5px;
+  font-size: 0.75rem;
+  color: var(--ui-muted);
+  margin-top: 0.25rem;
 }
-.task-delay-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #c49653;
-  margin-left: auto;
-  flex-shrink: 0;
+.task-label .task-delay-label {
+  color: var(--ui-warning);
+  font-weight: 600;
 }
 .gantt-track {
   position: relative;
@@ -835,8 +844,8 @@ h2 {
     to right,
     transparent 0,
     transparent calc(var(--day-width) - 1px),
-    #edf1e7 calc(var(--day-width) - 1px),
-    #edf1e7 var(--day-width)
+    var(--ui-border) calc(var(--day-width) - 1px),
+    var(--ui-border) var(--day-width)
   );
 }
 .gantt-deadline {
@@ -844,347 +853,356 @@ h2 {
   top: 0;
   bottom: 0;
   width: 1px;
-  border-left: 1px dashed #b59b6d;
+  border-left: 1px dashed var(--ui-warning);
   z-index: 1;
 }
 .gantt-baseline {
   position: absolute;
-  top: 44px;
-  height: 7px;
-  border: 1px dashed #adb99f;
-  border-radius: 2px;
-  background: #f8faf5;
+  top: 3.375rem;
+  height: 0.625rem;
+  border: 1px dashed var(--ui-muted);
+  border-radius: 0.1875rem;
+  background: var(--ui-surface-alt);
 }
 .gantt-bar {
   position: absolute;
-  top: 17px;
-  height: 23px;
-  border-radius: 4px;
-  background: #b4c9a0;
-  border: 1px solid #a3bd8c;
-  color: #36542a;
-  min-width: 18px;
-  transition:
-    left 0.25s ease,
-    width 0.25s ease;
+  top: 1.125rem;
+  height: 1.75rem;
+  border-radius: 0.375rem;
+  background: var(--ui-accent);
+  border: 1px solid var(--ui-accent);
+  color: var(--ui-on-accent);
+  min-width: 1.75rem;
+  transition: left 0.2s ease, width 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .gantt-bar.shifted {
-  background: #e3c18b;
-  border-color: #d4ad6e;
-  color: #714d1f;
+  background: var(--ui-warning-bg);
+  background-image: repeating-linear-gradient(135deg, transparent 0 5px, color-mix(in srgb, var(--ui-warning) 12%, transparent) 5px 6px);
+  border: 1px solid var(--ui-warning);
+  color: var(--ui-warning);
 }
 .gantt-bar span {
-  font-size: 9px;
-  font-weight: 600;
+  font-size: 0.75rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
 }
 .gantt-end {
-  background: #f8faf5;
+  background: var(--ui-surface-alt);
 }
 .gantt-end > .gantt-label {
-  padding: 10px 20px;
-  font-size: 7px;
+  padding: 0.625rem 1rem;
 }
 .gantt-day-labels {
   display: flex;
   align-items: center;
-  color: #8b977f;
+  color: var(--ui-muted);
 }
 .gantt-day-labels > span {
   width: var(--day-width);
-  padding-left: 4px;
-  font-size: 8px;
+  padding-left: 0.25rem;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
 }
 .timeline-insight {
   display: flex;
   align-items: flex-start;
-  gap: 11px;
-  padding: 18px 20px;
-  background: #f7faf3;
-  border-top: 1px solid #e5ecdc;
+  gap: 0.75rem;
+  padding: 1.125rem 1.25rem;
+  background: var(--ui-surface-alt);
+  border-top: 1px solid var(--ui-border);
 }
 .insight-icon {
   display: grid;
   place-items: center;
-  height: 30px;
-  width: 30px;
+  height: 2rem;
+  width: 2rem;
   flex-shrink: 0;
-  border: 1px solid #e1e9d7;
-  background: #eff4e8;
-  border-radius: 8px;
-  color: #7b9860;
+  background: var(--ui-surface);
+  border-radius: 0.5rem;
+  color: var(--ui-accent);
 }
 .timeline-insight strong {
-  font-size: 11px;
-  color: #53733e;
-  font-weight: 550;
+  font-size: 0.875rem;
+  color: var(--ui-text);
+  font-weight: 600;
 }
 .timeline-insight p {
-  font-size: 10px;
-  color: #758369;
-  line-height: 1.7;
-  margin: 5px 0 0;
+  font-size: 0.8125rem;
+  color: var(--ui-muted);
+  line-height: 1.65;
+  margin: 0.375rem 0 0;
 }
 .timeline-insight.has-delay {
-  background: #fdf9f0;
-  border-color: #efe4ce;
+  background: var(--ui-warning-bg);
 }
-.has-delay strong {
-  color: #8b693b;
-}
-.has-delay p {
-  color: #877961;
+.has-delay strong,
+.has-delay p,
+.has-delay .insight-icon {
+  color: var(--ui-warning);
 }
 .has-delay .insight-icon {
-  background: #fbf1de;
-  border-color: #eee0c5;
-  color: #aa8551;
+  background: var(--ui-warning-bg);
+  border: 1px solid var(--ui-warning);
 }
 .task-detail {
-  scroll-margin-top: 18px;
-  border: 1px solid #dfe6d8;
-  border-radius: 10px;
-  padding: 20px;
-  background: #fff;
+  min-width: 0;
+  scroll-margin-top: 1rem;
+  border: 1px solid var(--ui-border);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  background: var(--ui-surface);
 }
 .task-detail-kicker {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
-  font-size: 8px;
-  letter-spacing: 0.8px;
-  color: #8a967e;
-  margin-bottom: 18px;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.035em;
+  color: var(--ui-muted);
+  margin-bottom: 1rem;
 }
 .task-path-badge {
-  font-size: 8px;
+  font-size: 0.75rem;
   letter-spacing: 0;
-  padding: 4px 6px;
-  background: #eff4e7;
-  border-radius: 4px;
-  color: #6d8556;
+  padding: 0.25rem 0.375rem;
+  background: var(--ui-surface-alt);
+  border-radius: 0.375rem;
+  color: var(--ui-accent);
 }
 .task-detail h2 {
-  font-size: 18px;
-  font-weight: 550;
-  line-height: 1.4;
-  letter-spacing: -0.4px;
+  font-size: 1.25rem;
+  font-weight: 650;
+  line-height: 1.35;
+  letter-spacing: -0.025em;
 }
 .task-description {
-  font-size: 10px;
-  color: #7a8770;
-  line-height: 1.8;
-  margin: 9px 0 18px;
+  font-size: 0.875rem;
+  color: var(--ui-muted);
+  line-height: 1.65;
+  margin: 0.625rem 0 1.25rem;
 }
 .task-owner {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 0.625rem;
+}
+.task-owner > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .task-owner > span {
   display: grid;
   place-items: center;
-  width: 31px;
-  height: 31px;
+  flex-shrink: 0;
+  width: 2.25rem;
+  height: 2.25rem;
   border-radius: 50%;
-  background: #eef3e7;
-  color: #6d8459;
-  font-size: 10px;
+  background: var(--ui-surface-alt);
+  color: var(--ui-accent);
+  font-size: 0.8125rem;
+  font-weight: 550;
 }
 .task-owner small {
   display: block;
-  font-size: 8px;
-  color: #8a9581;
-  margin-bottom: 3px;
+  font-size: 0.75rem;
+  color: var(--ui-muted);
+  margin-bottom: 0.125rem;
 }
 .task-owner strong {
-  font-size: 10px;
-  color: #536a44;
-  font-weight: 500;
+  font-size: 0.875rem;
+  color: var(--ui-text);
+  font-weight: 550;
 }
 .task-dates {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 26px;
-  padding: 17px 0;
-  margin: 17px 0 0;
-  border-top: 1px solid #edf0e8;
-  color: #9ba58f;
+  gap: 1rem;
+  padding: 1rem 0;
+  margin: 1.125rem 0 0;
+  border-top: 1px solid var(--ui-border);
+  color: var(--ui-muted);
 }
 .task-dates dt {
-  font-size: 9px;
-  color: #89957e;
-  margin-bottom: 5px;
+  font-size: 0.75rem;
+  color: var(--ui-muted);
+  margin-bottom: 0.25rem;
 }
 .task-dates dd {
   margin: 0;
-  font-size: 12px;
-  color: #536e42;
-  font-weight: 550;
+  font-size: 0.9375rem;
+  color: var(--ui-text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 h3 {
-  margin: 0 0 10px;
-  color: #5a704a;
-  font-size: 10px;
-  font-weight: 550;
+  margin: 0 0 0.625rem;
+  color: var(--ui-text);
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 .task-prerequisites {
-  padding-bottom: 18px;
+  padding-bottom: 1.25rem;
 }
 .task-prerequisites > div {
   display: flex;
-  gap: 5px;
+  gap: 0.5rem;
   flex-wrap: wrap;
 }
 .task-prerequisites button {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 7px;
-  border: 1px solid #e4e9dc;
-  border-radius: 4px;
-  background: #f8faf5;
-  font-size: 9px;
-  color: #6e805e;
+  justify-content: flex-start;
+  gap: 0.375rem;
+  min-height: 2.25rem;
+  max-width: 100%;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--ui-control-border);
+  border-radius: 0.5rem;
+  background: var(--ui-surface);
+  font-size: 0.75rem;
+  color: var(--ui-text);
+  text-align: left;
 }
 .task-prerequisites p,
 .downstream-tasks > p {
-  font-size: 10px;
-  color: #869279;
+  font-size: 0.8125rem;
+  color: var(--ui-muted);
   line-height: 1.6;
   margin: 0;
 }
 .delay-control {
-  background: #f3f6ed;
-  border: 1px solid #e2e9d8;
-  border-radius: 8px;
-  padding: 13px;
+  min-width: 0;
+  background: var(--ui-surface-alt);
+  border: 1px solid var(--ui-border);
+  border-radius: 0.75rem;
+  padding: 1rem;
 }
 .delay-control-heading {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 5px;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 .delay-control label {
-  font-size: 10px;
-  font-weight: 550;
-  color: #526e40;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ui-text);
 }
 .delay-control output {
-  font-size: 13px;
-  color: #648648;
-  font-weight: 600;
+  font-size: 1rem;
+  color: var(--ui-accent);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
 }
 .delay-control p {
-  margin: 6px 0 13px;
-  font-size: 9px;
-  color: #849177;
+  margin: 0.375rem 0 0.5rem;
+  font-size: 0.75rem;
+  color: var(--ui-muted);
 }
 .delay-control input {
+  display: block;
   width: 100%;
+  min-height: 2.25rem;
   margin: 0;
-  accent-color: #779b59;
+  accent-color: var(--ui-accent);
   cursor: pointer;
 }
 .delay-range-labels {
   display: flex;
   justify-content: space-between;
-  font-size: 8px;
-  color: #8b977e;
-  margin: 5px 0 13px;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--ui-muted);
+  margin: 0 0 0.875rem;
 }
 .delay-presets {
-  display: flex;
-  gap: 5px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(3rem, 1fr));
+  gap: 0.375rem;
 }
 .delay-presets button {
-  flex: 1;
-  font-size: 9px;
-  padding: 6px 2px;
-  border: 1px solid #e0e7d6;
-  background: #fcfdf9;
-  border-radius: 4px;
-  color: #788b65;
-  white-space: nowrap;
+  min-height: 2.25rem;
+  font-size: 0.75rem;
+  padding: 0.375rem 0.25rem;
+  border: 1px solid var(--ui-control-border);
+  background: var(--ui-surface);
+  border-radius: 0.5rem;
+  color: var(--ui-text);
 }
 .delay-presets button.active {
-  background: #e3ecd7;
-  border-color: #c4d6af;
-  color: #4d6c39;
+  background: var(--ui-accent);
+  border-color: var(--ui-accent);
+  color: var(--ui-on-accent);
+  font-weight: 600;
 }
 .downstream-tasks {
-  margin-top: 20px;
+  margin-top: 1.25rem;
 }
 .downstream-tasks h3 {
   display: flex;
   justify-content: space-between;
+  gap: 0.75rem;
 }
 .downstream-tasks h3 > span {
-  color: #8a987e;
-  font-size: 9px;
+  color: var(--ui-muted);
+  font-size: 0.8125rem;
 }
 .downstream-tasks button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 0.375rem 0.625rem;
   width: 100%;
+  min-height: 2.25rem;
   background: none;
   border: 0;
-  border-bottom: 1px solid #eef1e8;
-  padding: 10px 0;
+  border-bottom: 1px solid var(--ui-border);
+  padding: 0.625rem 0;
   text-align: left;
 }
 .downstream-tasks button > span {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 10px;
-  color: #6a7b5d;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--ui-text);
 }
 .downstream-tasks button small {
-  font-size: 8px;
-  white-space: nowrap;
-  color: #869678;
+  font-size: 0.75rem;
+  color: var(--ui-muted);
 }
 .task-prerequisites button:hover,
-.delay-presets button:hover {
-  background: #e9f1df;
+.delay-presets button:hover:not(.active),
+.downstream-tasks button:hover {
+  background: var(--ui-hover);
 }
-.downstream-tasks button:hover > span {
-  color: #2b6846;
+.timeline-page button:active:not(:disabled) {
+  box-shadow: inset 0 0 0 2px var(--ui-accent);
 }
 .downstream-tasks .task-flex-note {
-  margin-top: 12px;
-  color: #65804f;
+  margin-top: 0.75rem;
+  color: var(--ui-accent);
 }
 .timeline-footnote {
   display: flex;
-  gap: 7px;
+  gap: 0.5rem;
   align-items: flex-start;
-  margin: 17px 0 0;
-  color: #88937e;
+  margin: 1.25rem 0 0;
+  color: var(--ui-muted);
 }
 .timeline-footnote p {
-  font-size: 9px;
+  font-size: 0.75rem;
   margin: 0;
-  line-height: 1.7;
-  max-width: 830px;
-}
-@media (min-width: 1600px) {
-  .timeline-page-inner {
-    padding: 40px;
-  }
-  .timeline-layout {
-    grid-template-columns: minmax(0, 1fr) 310px;
-  }
-  .task-detail {
-    padding: 24px;
-  }
+  line-height: 1.65;
+  max-width: 60rem;
 }
 @media (max-width: 1190px) {
   .timeline-layout {
@@ -1192,25 +1210,18 @@ h3 {
   }
   .task-detail {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    column-gap: 28px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 1.75rem;
   }
   .task-detail-kicker,
   .task-detail h2,
-  .task-description {
-    grid-column: 1;
-  }
-  .task-detail-kicker {
-    margin-bottom: 12px;
-  }
-  .task-owner {
-    grid-column: 1;
-  }
-  .task-dates {
+  .task-description,
+  .task-owner,
+  .task-dates,
+  .task-prerequisites {
     grid-column: 1;
   }
   .task-prerequisites {
-    grid-column: 1;
     padding: 0;
   }
   .delay-control {
@@ -1223,107 +1234,71 @@ h3 {
     grid-row: 5 / 8;
     margin-top: 0;
   }
-  .timeline-page-inner {
-    padding: 27px 24px;
-  }
-  .timeline-metrics {
-    gap: 9px;
-  }
-  .timeline-metrics article {
-    padding: 14px;
-  }
-  .timeline-metrics strong {
-    font-size: 22px;
-  }
 }
 @media (max-width: 760px) {
+  .timeline-page {
+    --task-label-width: min(60vw, 12rem);
+  }
   .timeline-page-inner {
-    padding: 24px 18px;
+    padding: 1.5rem 1rem;
   }
   .timeline-page-heading {
     align-items: flex-start;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin-bottom: 19px;
-  }
-  .timeline-intro {
-    font-size: 11px;
-  }
-  .timeline-reset {
-    padding: 8px 11px;
-  }
-  .timeline-study {
-    padding: 12px;
-    gap: 9px;
-    flex-wrap: wrap;
+    gap: 1rem;
   }
   .timeline-study > div {
-    flex: 1;
-  }
-  .timeline-study strong {
-    font-size: 11px;
-  }
-  .timeline-study p {
-    font-size: 10px;
-  }
-  .timeline-sample {
-    margin-left: 44px;
-  }
-  .timeline-metrics {
-    grid-template-columns: 1fr 1fr;
-    margin: 16px 0;
+    flex-basis: calc(100% - 3.25rem);
   }
   .timeline-metrics article {
-    padding: 15px;
-  }
-  .metric-label {
-    font-size: 9px;
-    margin-bottom: 11px;
+    padding: 1rem 0.5rem;
   }
   .timeline-board-heading {
-    padding: 18px 14px 14px;
-    gap: 8px;
-  }
-  .timeline-board-heading h2 {
-    font-size: 12px;
-  }
-  .timeline-board-heading p {
-    font-size: 9px;
-  }
-  .baseline-toggle {
-    font-size: 9px;
+    padding: 1rem 1rem 0.75rem;
   }
   .timeline-legend {
-    padding: 0 14px 14px;
-    gap: 10px;
-    font-size: 8px;
-  }
-  .timeline-layout {
-    gap: 15px;
+    padding: 0 1rem 1rem;
   }
   .timeline-insight {
-    padding: 16px 14px;
+    padding: 1rem;
   }
   .task-detail {
     display: block;
-    padding: 19px;
+    padding: 1.125rem;
   }
   .task-prerequisites {
-    padding-bottom: 18px;
+    padding-bottom: 1.25rem;
   }
   .downstream-tasks {
-    margin-top: 20px;
+    margin-top: 1.25rem;
   }
-  .timeline-footnote p {
-    font-size: 8px;
+  .timeline-reset,
+  .baseline-toggle,
+  .task-prerequisites button,
+  .delay-presets button,
+  .downstream-tasks button,
+  .delay-control input {
+    min-height: 2.75rem;
   }
-  .gantt-label {
-    max-width: 190px;
+}
+@container timeline (max-width: 62rem) {
+  .timeline-layout {
+    grid-template-columns: minmax(0, 1fr);
   }
-  .gantt-axis,
-  .gantt-row,
-  .gantt-end {
-    grid-template-columns: 190px minmax(0, 1fr);
+}
+@container timeline (max-width: 42rem) {
+  .task-detail {
+    display: block;
+  }
+  .task-prerequisites {
+    padding-bottom: 1.25rem;
+  }
+  .downstream-tasks {
+    margin-top: 1.25rem;
+  }
+}
+@container timeline (max-width: 20rem) {
+  .timeline-study > div {
+    flex-basis: 100%;
   }
 }
 @media (prefers-reduced-motion: reduce) {
