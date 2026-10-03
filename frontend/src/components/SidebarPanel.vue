@@ -1,5 +1,5 @@
 <script setup>
-import { Ellipsis, Pencil, Plus, Search, Trash2, X } from "@lucide/vue";
+import { Ellipsis, Pencil, Plus, Search, SlidersHorizontal, Trash2, X } from "@lucide/vue";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,29 +8,28 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import StatusBadge from "./StatusBadge.vue";
 
-defineProps({
+const props = defineProps({
   sessions: { type: Array, required: true },
   filteredSessions: { type: Array, required: true },
   similarIds: { type: Set, default: () => new Set() },
+  statusOf: { type: Function, default: null },
   searchStatus: { type: String, default: "" },
   activeId: { type: String, default: null },
   runningCount: { type: Number, default: 0 },
   closable: { type: Boolean, default: false },
 });
 const search = defineModel("search", { type: String, default: "" });
-const emit = defineEmits(["new", "select", "rename", "delete", "palette", "close"]);
+const emit = defineEmits(["new", "select", "rename", "delete", "palette", "settings", "close"]);
 
 function sessionStatus(session) {
+  if (props.statusOf) return props.statusOf(session);
   return session.runs.at(-1)?.status ?? "draft";
 }
-function statusText(session) {
-  const status = { running: "running", completed: "done", stopped: "stopped" }[
-    sessionStatus(session)
-  ];
+function runCount(session) {
   const runs = session.runs.length;
-  if (!status) return "draft";
-  return `${status} · ${runs} ${runs === 1 ? "run" : "runs"}`;
+  return runs ? `${runs} ${runs === 1 ? "run" : "runs"}` : "";
 }
 const isMac =
   typeof navigator !== "undefined" && /mac|iphone|ipad/i.test(navigator.platform);
@@ -52,6 +51,9 @@ const isMac =
       <button class="sidebar-row-button" @click="emit('palette')">
         <Search :size="15" /> jump to chat
         <span class="kbd mono">{{ isMac ? "⌘" : "ctrl " }}k</span>
+      </button>
+      <button class="sidebar-row-button" @click="emit('settings')">
+        <SlidersHorizontal :size="15" /> model &amp; data
       </button>
       <Input
         v-model="search"
@@ -83,8 +85,8 @@ const isMac =
             @click="emit('select', session.id)"
           >
             <span class="conversation-title">{{ session.title }}</span>
-            <span class="conversation-status mono">
-              <span class="dot" :class="sessionStatus(session)"></span>{{ statusText(session) }}
+            <span class="conversation-status">
+              <StatusBadge size="sm" :status="sessionStatus(session)" :meta="runCount(session)" />
               <span v-if="similarIds.has(session.id)" class="similar-tag">≈ similar</span>
             </span>
           </button>

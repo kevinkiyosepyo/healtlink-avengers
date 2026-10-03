@@ -6,10 +6,15 @@ import { forceCenter, forceCollide, forceLink, forceManyBody, forceSimulation } 
 import { Maximize2, Minus, Plus, X } from "@lucide/vue";
 import { useDebounceFn, useResizeObserver } from "@vueuse/core";
 import AgentNode from "./AgentNode.vue";
+import StatusBadge from "./StatusBadge.vue";
+import { AGENTS as agents, CATEGORIES as categories, RELATIONS as relations, STANCE_LEVELS, agentId } from "../lib/agents.js";
 
 const props = defineProps({
   run: { type: Object, default: null },
   sessionTitle: { type: String, default: "" },
+  // { "02": { score: 0–4, confidence, rationale } } from the OpenAI analysis, or null.
+  stances: { type: Object, default: null },
+  stanceSource: { type: String, default: "" },
 });
 
 const flowId = `graph-${useId()}`;
@@ -19,30 +24,7 @@ const { zoomIn, zoomOut, fitView, setCenter } = useVueFlow(flowId);
 const canvas = ref(null);
 useResizeObserver(canvas, useDebounceFn(() => fitView({ padding: 0.2, duration: 200 }), 120));
 
-// Illustrative knowledge graph: who influences whom around one scenario.
-const agents = [
-  { label: "your scenario", category: "core", x: 228, y: 188 },
-  { label: "residents", category: "community", x: 124, y: 117 },
-  { label: "clinic staff", category: "provider", x: 337, y: 118 },
-  { label: "local press", category: "media", x: 352, y: 245 },
-  { label: "caregivers", category: "community", x: 164, y: 291 },
-  { label: "commuters", category: "community", x: 76, y: 220 },
-  { label: "city council", category: "policy", x: 233, y: 62 },
-  { label: "insurers", category: "economy", x: 410, y: 177 },
-  { label: "pharmacies", category: "provider", x: 296, y: 330 },
-  { label: "students", category: "community", x: 66, y: 70 },
-  { label: "seniors", category: "community", x: 85, y: 328 },
-  { label: "employers", category: "economy", x: 403, y: 70 },
-];
-const relations = [
-  [0, 1, "affects"], [0, 2, "staffs"], [0, 3, "covered by"], [0, 4, "affects"],
-  [0, 5, "affects"], [0, 6, "approved by"], [1, 5, "overlaps"], [1, 6, "lobbies"],
-  [1, 9, "includes"], [2, 6, "reports to"], [2, 7, "bills"], [2, 11, "partners"],
-  [3, 7, "scrutinizes"], [3, 8, "reports on"], [4, 5, "carpools"], [4, 8, "relies on"],
-  [4, 10, "cares for"], [5, 10, "shares transit"],
-];
-const categories = ["core", "community", "provider", "policy", "media", "economy"];
-const ids = agents.map((_, index) => String(index + 1).padStart(2, "0"));
+const ids = agents.map((_, index) => agentId(index));
 
 const degree = agents.map((_, index) => relations.filter(([a, b]) => a === index || b === index).length);
 const radius = degree.map((count) => 9 + count * 2.2);
@@ -124,6 +106,22 @@ watch(reached, (now, before) => {
   }
 });
 
+// ---------- stance coloring ----------
+const hasStances = computed(() => Boolean(props.stances && Object.keys(props.stances).length));
+const colorMode = ref("category");
+watch(hasStances, (has) => (colorMode.value = has ? "stance" : "category"), { immediate: true });
+// Diverging, muted: opposed (dusty rose) → neutral (warm grey) → supportive (sage).
+function stanceColor(score) {
+  if (score < 2) return `color-mix(in oklab, var(--stance-opposed) ${Math.round(((2 - score) / 2) * 100)}%, var(--stance-neutral))`;
+  return `color-mix(in oklab, var(--stance-supportive) ${Math.round(((score - 2) / 2) * 100)}%, var(--stance-neutral))`;
+}
+function stanceFor(index) {
+  return hasStances.value ? props.stances[ids[index]] ?? null : null;
+}
+function stanceLabel(score) {
+  return STANCE_LEVELS[Math.round(score)];
+}
+
 // ---------- interaction ----------
 const hoveredId = ref(null);
 const selectedId = ref(null);
@@ -167,6 +165,7 @@ const nodes = computed(() =>
       degree: degree[index],
       radius: radius[index],
       state: nodeState(index),
+      color: colorMode.value === "stance" && stanceFor(index) ? stanceColor(stanceFor(index).score) : null,
       dim: Boolean(neighbours.value && !neighbours.value.has(index)),
       focus: focusId.value === ids[index],
       selected: selectedId.value === ids[index],
@@ -206,6 +205,7 @@ const selected = computed(() => {
     ...agents[index],
     id: selectedId.value,
     state: nodeState(index),
+    stance: stanceFor(index),
     links: relations
       .filter(([a, b]) => a === index || b === index)
       .map(([a, b, relation]) => {
@@ -231,10 +231,7 @@ const stateLabel = { idle: "not reached", running: "active", done: "explored", s
     <header class="graph-head">
       <div class="graph-head-left">
         <h2 :id="`${flowId}-title`" class="mono">knowledge graph</h2>
-        <span v-if="run" class="pill mono"
-          ><span class="dot" :class="status"></span>{{ status === "completed" ? "done" : status }}
-          · {{ Math.round(progress) }}%</span
-        >
+        <StatusBadge v-if="run" variant="chip" size="sm" :status="status" :meta="`${Math.round(progress)}%`" />
       </div>
       <span class="mono graph-stage">{{ stageLabel.toLowerCase() }}</span>
     </header>
@@ -264,6 +261,14 @@ const stateLabel = { idle: "not reached", running: "active", done: "explored", s
       </VueFlow>
 
       <div class="kg-legend" role="group" aria-label="Filter categories">
+        <div v-if="hasStances" class="kg-mode segmented mono" aria-label="Color nodes by">
+          <button :class="{ active: colorMode === 'category' }" :aria-pressed="colorMode === 'category'" @click="colorMode = 'category'">category</button>
+          <button :class="{ active: colorMode === 'stance' }" :aria-pressed="colorMode === 'stance'" @click="colorMode = 'stance'">stance</button>
+        </div>
+        <div v-if="colorMode === 'stance'" class="kg-scale mono" aria-label="Stance scale">
+          <span>opposed</span><i></i><span>supportive</span>
+        </div>
+        <template v-else>
         <button
           v-for="category in categories"
           :key="category"
@@ -275,6 +280,7 @@ const stateLabel = { idle: "not reached", running: "active", done: "explored", s
         >
           <i></i>{{ category }}
         </button>
+        </template>
       </div>
 
       <div class="kg-controls" role="group" aria-label="Zoom">
@@ -293,6 +299,15 @@ const stateLabel = { idle: "not reached", running: "active", done: "explored", s
             </div>
             <button class="icon-btn" aria-label="Close details" @click="selectedId = null"><X :size="14" /></button>
           </div>
+          <p v-if="selected.stance" class="kg-stance">
+            <span class="kg-stance-dot" :style="{ background: stanceColor(selected.stance.score) }"></span>
+            likely {{ stanceLabel(selected.stance.score) }}
+            <span class="mono">
+              {{ selected.stance.score.toFixed(1) }}/4<template v-if="selected.stance.confidence !== null">
+                · {{ Math.round(selected.stance.confidence * 100) }}% confident</template
+              ></span
+            >
+          </p>
           <p class="mono kg-panel-label">relations · {{ selected.links.length }}</p>
           <ul>
             <li v-for="link in selected.links" :key="link.id">
@@ -313,7 +328,7 @@ const stateLabel = { idle: "not reached", running: "active", done: "explored", s
 
     <footer class="graph-foot mono">
       <span>{{ String(visibleCount).padStart(2, "0") }} agents — {{ String(visibleEdges).padStart(2, "0") }} relations — drag, hover, click</span>
-      <span>illustrative topology — not model output</span>
+      <span>{{ hasStances ? `stances estimated by ${stanceSource || "model"} — verify before use` : "illustrative topology — not model output" }}</span>
     </footer>
   </section>
 </template>
@@ -399,6 +414,45 @@ const stateLabel = { idle: "not reached", running: "active", done: "explored", s
   text-decoration: line-through;
 }
 
+.kg-mode button {
+  height: 20px;
+  padding: 0 8px;
+}
+.kg-scale {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--canvas) 85%, transparent);
+  color: var(--muted);
+}
+.kg-scale i {
+  width: 64px;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--stance-opposed), var(--stance-neutral), var(--stance-supportive));
+}
+.kg-stance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 0;
+  color: var(--body);
+  font-size: 13px;
+}
+.kg-stance .mono {
+  color: var(--faint);
+}
+.kg-stance-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
 /* zoom controls */
 .kg-controls {
   position: absolute;
@@ -466,7 +520,7 @@ const stateLabel = { idle: "not reached", running: "active", done: "explored", s
 }
 .kg-link {
   display: grid;
-  grid-template-columns: 92px auto 1fr;
+  grid-template-columns: 104px auto 1fr;
   align-items: center;
   gap: 8px;
   width: 100%;

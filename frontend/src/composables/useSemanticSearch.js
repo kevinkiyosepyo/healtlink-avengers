@@ -1,7 +1,12 @@
 import { ref, shallowRef, watch } from "vue";
-import { createStore, get, set } from "idb-keyval";
+import { createStore, del, get, keys, set } from "idb-keyval";
 
 let instance;
+
+async function loadIndexLib() {
+  return import("../lib/semanticIndex.js");
+}
+let liveTextKeys = () => new Set();
 
 // Shared, lazily started semantic index over the workspace's chats.
 // status: idle → loading (model download) → ready | unavailable
@@ -28,7 +33,14 @@ export function useSemanticSearch(sessions) {
   let cache = null;
   try {
     const store = createStore("microfish-embeddings", "vectors");
-    cache = { get: (key) => get(key, store), set: (key, value) => set(key, value, store) };
+    cache = {
+      get: (key) => get(key, store),
+      set: (key, value) => set(key, value, store),
+      // Drop embeddings for text no longer in any chat (deleted chats leave nothing behind).
+      async prune(liveKeys) {
+        for (const key of await keys(store)) if (!liveKeys.has(key)) await del(key, store);
+      },
+    };
   } catch {
     /* No IndexedDB (private mode): embeddings are recomputed per session. */
   }
@@ -49,7 +61,8 @@ export function useSemanticSearch(sessions) {
       });
       worker.addEventListener("error", () => fail());
       // Orama is loaded on demand so it stays out of the first-paint bundle.
-      const { createSemanticIndex } = await import("../lib/semanticIndex.js");
+      const { createSemanticIndex, documentsFromSessions, textKey } = await loadIndexLib();
+      liveTextKeys = (list) => new Set(documentsFromSessions(list).map((doc) => textKey(doc.text)));
       const created = await createSemanticIndex({ embed, cache });
       // First sync runs unqueued so a model failure surfaces as "unavailable".
       await created.sync(sessions.value);
@@ -74,6 +87,7 @@ export function useSemanticSearch(sessions) {
         if (!index.value) return;
         await index.value.sync(sessions.value);
         indexSize.value = index.value.size();
+        await cache?.prune(liveTextKeys(sessions.value));
       })
       .catch(() => {});
     return syncing;

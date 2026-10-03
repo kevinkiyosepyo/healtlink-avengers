@@ -3,8 +3,8 @@ import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, 
 import { ArrowUp, PanelLeft, Square } from "@lucide/vue";
 import SidebarPanel from "./components/SidebarPanel.vue";
 import BootScreen from "./components/fx/BootScreen.vue";
-import { BlurReveal } from "./components/ui/blur-reveal";
-import { FlickeringGrid } from "./components/ui/flickering-grid";
+import SampleRack from "./components/fx/SampleRack.vue";
+import StatusBadge from "./components/StatusBadge.vue";
 import {
   Dialog,
   DialogContent,
@@ -23,11 +23,19 @@ import { Sheet, SheetContent, SheetDescription, SheetTitle } from "./components/
 import { Input } from "./components/ui/input";
 import { prefersReducedMotion, useLenis } from "./composables/useMotion.js";
 import { useSemanticSearch } from "./composables/useSemanticSearch.js";
+import { ERROR_COPY, useResearch } from "./composables/useResearch.js";
+import AnalysisPanel from "./components/AnalysisPanel.vue";
+import { BLOCK_REASONS } from "./lib/guardrails.js";
 import { useSimulationWorkspace } from "./composables/useSimulationWorkspace.js";
 import { PROMPT_LIMIT, TITLE_LIMIT } from "./lib/simulationWorkspace.js";
 
 // Vue Flow is only needed once the graph is opened.
 const SimulationGraph = defineAsyncComponent(() => import("./components/SimulationGraph.vue"));
+// Welcome effects (motion-v) and settings load on demand to keep first paint light.
+const BlurReveal = defineAsyncComponent(() => import("./components/ui/blur-reveal/BlurReveal.vue"));
+const FlickeringGrid = defineAsyncComponent(() => import("./components/ui/flickering-grid/FlickeringGrid.vue"));
+const SettingsDialog = defineAsyncComponent(() => import("./components/SettingsDialog.vue"));
+const settingsMounted = ref(false);
 
 const {
   sessions,
@@ -162,9 +170,17 @@ const semanticLabel = computed(
 );
 const latestRun = computed(() => activeSession.value?.runs.at(-1) ?? null);
 const isRunning = computed(() => latestRun.value?.status === "running");
+const checking = ref(false);
 const canSubmit = computed(
-  () => Boolean(activeSession.value?.draft.trim()) && !isRunning.value,
+  () => Boolean(activeSession.value?.draft.trim()) && !isRunning.value && !checking.value,
 );
+const research = useResearch(sessions);
+const settingsOpen = ref(false);
+watch(settingsOpen, (open) => {
+  if (open) settingsMounted.value = true;
+});
+const latestRecord = computed(() => (latestRun.value ? research.records[latestRun.value.id] ?? null : null));
+const latestStances = computed(() => latestRecord.value?.analysis?.stances ?? null);
 
 function runForMessage(message) {
   return activeSession.value?.runs.find((run) => run.id === message.runId);
@@ -172,8 +188,16 @@ function runForMessage(message) {
 function runIndex(run) {
   return String(activeSession.value.runs.indexOf(run) + 1).padStart(2, "0");
 }
-function runTitle(run) {
-  return { running: "running", completed: "done", stopped: "stopped" }[run.status] ?? run.status;
+function formatDuration(ms) {
+  const seconds = Math.max(0, Math.round(ms / 1000));
+  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+}
+// Vercel-style metadata: progress while running, then the elapsed duration.
+function runMeta(run) {
+  const elapsed = formatDuration(((run.progress || 0) / 100) * (run.durationMs || 0));
+  if (run.status === "running") return [`${Math.round(run.progress)}%`, elapsed];
+  if (run.status === "stopped") return [`at ${Math.round(run.progress)}%`, elapsed];
+  return [elapsed, `${run.agentCount} agents`];
 }
 
 function selectChat(id) {
@@ -197,13 +221,72 @@ async function useStarter(prompt) {
   await nextTick();
   composer.value?.focus();
 }
-function submitRun() {
+// Every prompt is screened before a run starts: local rules, then (OpenAI
+// mode) moderation; the model's own scope check runs with the analysis.
+async function submitRun() {
   if (!canSubmit.value) return;
-  const run = startRun(activeId.value, activeSession.value.draft);
-  submitError.value = run
-    ? ""
-    : "this run could not start — check the workspace notice and try again.";
+  const session = activeSession.value;
+  const prompt = session.draft;
+  checking.value = true;
+  submitError.value = "";
+  const result = await research.check(prompt);
+  checking.value = false;
+  if (result.needsKey) {
+    submitError.value = "add and test an openai key in settings, or switch to demo mode.";
+    settingsOpen.value = true;
+    return;
+  }
+  if (result.error) {
+    submitError.value = ERROR_COPY[result.error] ?? ERROR_COPY.unavailable;
+    return;
+  }
+  if (result.blocked) {
+    submitError.value = BLOCK_REASONS[result.blocked] ?? BLOCK_REASONS.unsafe;
+    return;
+  }
+  const run = startRun(session.id, prompt);
+  if (!run) {
+    submitError.value = "this run could not start — check the workspace notice and try again.";
+    return;
+  }
+  const record = await research.analyze({ run, session, guardrails: result.guardrails });
+  // In OpenAI mode the analysis is the result; end the playback so the
+  // researcher can ask a follow-up immediately.
+  const live = session.runs.find((item) => item.id === run.id);
+  if (record?.mode === "openai" && live?.status === "running") stopRun(session.id);
+  if (record?.analysis?.inScope === false && activeId.value === session.id) {
+    submitError.value = BLOCK_REASONS[record.analysis.reason] ?? BLOCK_REASONS.off_topic;
+  }
 }
+// The graph and sidebar follow the analysis (not the playback) for OpenAI runs.
+function effectiveStatus(run) {
+  if (!run) return "draft";
+  const record = research.records[run.id];
+  if (record?.mode !== "openai") return run.status;
+  return { analyzing: "running", ready: "completed", blocked: "error", error: "error" }[research.status[run.id]] ?? run.status;
+}
+const graphRun = computed(() => {
+  const run = latestRun.value;
+  if (!run || research.records[run.id]?.mode !== "openai") return run;
+  const status = effectiveStatus(run);
+  return { ...run, status, progress: status === "completed" ? 100 : run.progress, stage: research.status[run.id] === "ready" ? "analysis ready" : run.stage };
+});
+watch(
+  () => latestRun.value && research.status[latestRun.value.id],
+  async () => {
+    await nextTick();
+    scrollToBottom();
+  },
+);
+function retryAnalysis(run) {
+  research.retry(run, activeSession.value);
+}
+watch(
+  () => activeSession.value?.draft,
+  () => {
+    if (submitError.value && !checking.value) submitError.value = "";
+  },
+);
 function composerKeydown(event) {
   if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
     event.preventDefault();
@@ -303,6 +386,7 @@ watch(
       v-model:search="search"
       :sessions="sessions"
       :filtered-sessions="filteredSessions"
+      :status-of="(session) => effectiveStatus(session.runs.at(-1))"
       :similar-ids="similarIds"
       :search-status="semanticLabel"
       :active-id="activeId"
@@ -312,6 +396,7 @@ watch(
       @rename="openAction('rename', $event)"
       @delete="openAction('delete', $event)"
       @palette="paletteOpen = true"
+      @settings="settingsOpen = true"
     />
 
     <Sheet v-model:open="sidebarOpen">
@@ -326,6 +411,7 @@ watch(
           closable
           :sessions="sessions"
           :filtered-sessions="filteredSessions"
+          :status-of="(session) => effectiveStatus(session.runs.at(-1))"
           :similar-ids="similarIds"
           :search-status="semanticLabel"
           :active-id="activeId"
@@ -337,6 +423,10 @@ watch(
           @palette="
             sidebarOpen = false;
             paletteOpen = true;
+          "
+          @settings="
+            sidebarOpen = false;
+            settingsOpen = true;
           "
           @close="sidebarOpen = false"
         />
@@ -358,10 +448,21 @@ watch(
           <span class="current">{{ activeSession?.title }}</span>
         </div>
         <div class="topbar-right">
-          <span v-if="runningCount" class="pill mono" role="status"
-            ><span class="dot running"></span>{{ runningCount }} running</span
-          >
-          <span class="pill mono demo-pill">demo</span>
+          <StatusBadge
+            v-if="runningCount"
+            role="status"
+            variant="chip"
+            status="running"
+            :label="`${runningCount} running`"
+          />
+          <button class="mode-chip" aria-label="Model and data settings" @click="settingsOpen = true">
+            <StatusBadge
+              variant="chip"
+              size="sm"
+              :status="research.ready.value ? 'completed' : 'draft'"
+              :label="research.modeLabel.value"
+            />
+          </button>
           <nav class="segmented mono" aria-label="Workspace view">
             <button
               v-for="view in views"
@@ -443,20 +544,36 @@ watch(
                     <template v-if="message.role === 'user'">you</template>
                     <template v-else-if="runForMessage(message)"
                       >microfish — run {{ runIndex(runForMessage(message)) }} —
-                      {{ runForMessage(message).agentCount }} agents — demo</template
+                      {{ research.records[runForMessage(message).id]?.mode === "openai"
+                        ? `11 stakeholders — ${research.records[runForMessage(message).id].provenance?.model || research.records[runForMessage(message).id].provenance?.requestedModel || "openai"}`
+                        : `${runForMessage(message).agentCount} agents — demo` }}</template
                     >
                     <template v-else>microfish — demo</template>
                   </div>
-                  <p class="message-text">{{ message.content }}</p>
+                  <p
+                    v-if="!(message.role === 'assistant' && research.records[message.runId]?.mode === 'openai')"
+                    class="message-text"
+                  >
+                    {{ message.content }}
+                  </p>
+                  <p v-else class="message-text">
+                    stakeholder analysis for this scenario — saved as a research record with full provenance.
+                  </p>
                   <div
-                    v-if="message.role === 'assistant' && runForMessage(message)"
+                    v-if="
+                      message.role === 'assistant' &&
+                      runForMessage(message) &&
+                      !(research.records[runForMessage(message).id]?.mode === 'openai' && research.status[runForMessage(message).id] !== 'analyzing')
+                    "
                     class="run-block"
                     :class="`run-${runForMessage(message).status}`"
                   >
-                    <div class="run-head mono">
-                      <span class="dot" :class="runForMessage(message).status"></span>
-                      <span>{{ runTitle(runForMessage(message)) }}</span>
-                      <span class="pct">{{ Math.round(runForMessage(message).progress) }}%</span>
+                    <div class="run-head">
+                      <StatusBadge
+                        :status="runForMessage(message).status"
+                        :meta="runMeta(runForMessage(message))"
+                      />
+                      <span class="pct mono">run {{ runIndex(runForMessage(message)) }}</span>
                     </div>
                     <div
                       class="progress"
@@ -468,6 +585,10 @@ watch(
                     >
                       <div :style="{ width: `${runForMessage(message).progress}%` }"></div>
                     </div>
+                    <SampleRack
+                      v-if="runForMessage(message).status === 'running' || research.status[runForMessage(message).id] === 'analyzing'"
+                      :progress="runForMessage(message).progress"
+                    />
                     <div class="run-foot mono">
                       <span>{{ runForMessage(message).stage.toLowerCase() }}</span>
                       <button
@@ -479,6 +600,15 @@ watch(
                       </button>
                     </div>
                   </div>
+                  <AnalysisPanel
+                    v-if="message.role === 'assistant' && runForMessage(message)"
+                    :record="research.records[runForMessage(message).id] ?? null"
+                    :status="research.status[runForMessage(message).id] ?? ''"
+                    :latest="runForMessage(message).id === latestRun?.id"
+                    @retry="retryAnalysis(runForMessage(message))"
+                    @export="research.exportRun(runForMessage(message).id, $event)"
+                    @graph="activeView = 'split'"
+                  />
                 </article>
               </TransitionGroup>
             </div>
@@ -506,7 +636,9 @@ watch(
                 @keydown="composerKeydown"
               ></textarea>
               <div class="composer-toolbar mono">
-                <span>12 demo agents</span>
+                <span v-if="checking" role="status">checking scope…</span>
+                <span v-else-if="research.settings.mode === 'openai'">sent to openai with your key · health scenarios only</span>
+                <span v-else>12 demo agents · health scenarios only</span>
                 <button
                   v-if="isRunning"
                   class="stop-btn mono"
@@ -529,7 +661,7 @@ watch(
             <p v-if="submitError" class="submit-error" role="alert">{{ submitError }}</p>
             <div class="composer-hints mono">
               <span class="keys">enter to run · shift+enter for newline</span>
-              <span>demo runs only — no engine connected</span>
+              <span>{{ research.settings.mode === "openai" ? "model estimates · not medical advice" : "demo runs · not medical advice" }}</span>
             </div>
           </div>
         </section>
@@ -549,7 +681,7 @@ watch(
         ></div>
 
         <section v-if="activeView !== 'chat'" class="graph-pane" aria-label="Simulation graph">
-          <SimulationGraph :run="latestRun" :session-title="activeSession.title" />
+          <SimulationGraph :run="graphRun" :stances="latestStances" :stance-source="latestRecord?.provenance?.model || ''" :session-title="activeSession.title" />
           <div v-if="activeView === 'graph' && isRunning" class="graph-stop">
             <button class="stop-btn mono" @click="stopRun(activeId)">
               <Square :size="11" fill="currentColor" /> stop
@@ -558,6 +690,8 @@ watch(
         </section>
       </main>
     </div>
+
+    <SettingsDialog v-if="settingsMounted" v-model:open="settingsOpen" :research="research" />
 
     <Dialog v-model:open="paletteOpen">
       <DialogContent class="overlay-surface overflow-hidden p-0" :show-close-button="false">
