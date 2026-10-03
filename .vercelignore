@@ -4,3 +4,12 @@
 /Trial-Researcher-Onboarding-Case-Study.md
 /Trial-Researcher-Personalized-Concept.md
 /healthlink-abstract-analysis.md
+/.playwright-cli
+/output
+/frontend/tests
+/frontend/node_modules
+/frontend/dist
+/.env
+/.env.*
+/frontend/.env
+/frontend/.env.*
