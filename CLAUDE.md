@@ -7,6 +7,16 @@ Vue + Vite workspace in `frontend/`. See `README.md` for behavior and run instru
 - Prod: `npm start` builds the frontend and serves it from one Express process with a strict CSP.
 - Modes: **demo** (the 12 illustrative agents, no model) or **bring-your-own OpenAI key**, entered in "model & data". The key goes browser → api.openai.com directly. There is no server-side key, proxy or database.
 
+## Product and positioning
+
+microfish is a **clinical-trial rehearsal workspace** (hackathon Track 2: AI for clinical research). It rehearses a protocol before it's locked:
+- **stakeholder rehearsal**, where a protocol change is scored against 11 trial stakeholder groups (demo agents or the researcher's own OpenAI key);
+- **study build**, which turns the protocol into a schedule of activities, a draft CRF, edit checks, burden figures, and auto-queries from a source note;
+- **document preflight**, which runs protocol/consent/onboarding consistency checks with line-level sources;
+- **start-up timeline**, a critical path from final protocol to first participant in.
+
+AI-native EDC/CRO platforms (e.g. Harbor, YC S26) automate execution after the protocol is locked: building the EDC from the protocol, extracting from source documents, generating queries. microfish sits upstream and complements them. Never imitate or name another company in the product UI; positioning belongs in the pitch.
+
 ## Project map
 
 - `frontend/src/lib/simulationWorkspace.js` and `frontend/src/composables/useSimulationWorkspace.js`: the controller (sessions, runs, persistence). Covered by `frontend/tests/`. Do not change these for UI work.
@@ -16,7 +26,9 @@ Vue + Vite workspace in `frontend/`. See `README.md` for behavior and run instru
 - Backend (`backend/`, Express 5): static hosting, SPA fallback, `GET /api/health`, and security headers (CSP `connect-src` limited to self, api.openai.com and the Hugging Face model CDN). Deliberately no data or model API.
 - Research flow: `frontend/src/lib/llm.js` (OpenAI client: strict JSON-schema output enumerating the 11 stakeholder ids, `parseAnalysis` fails closed, retries with backoff on 429/5xx, a retry without sampling params for models that reject them, moderation, model listing), `frontend/src/lib/records.js` (research records: canonical JSON plus a SHA-256 fingerprint, `verifyRecord`, long-format CSV with formula-injection protection), `frontend/src/composables/useResearch.js` (settings, key handling, the IndexedDB record store, guarded check → analyze, export, delete-all), `components/AnalysisPanel.vue`, `components/SettingsDialog.vue`.
 - Guardrails: `frontend/src/lib/guardrails.js`, the local screen (crisis, secrets, injection, PII, violence/unsafe, individual care, partisan framing) plus a keyword health-topic check for demo mode.
-- `frontend/src/lib/agents.js`: the fixed agents and relations shared by the graph and the analysis.
+- `frontend/src/lib/agents.js`: the fixed trial stakeholders (categories participant, site, oversight, sponsor, data), relations, stance scale and `stanceColor()`. Shared by the graph, the analysis panel and the OpenAI schema.
+- Tools (hash routes `#/build`, `#/preflight`, `#/timeline`, lazy-loaded): `lib/studyBuild.js` + `StudyBuildPage.vue`, `lib/documentPreflight.js` + `PreflightPage.vue`, `lib/bottleneckTimeline.js` (plan-agnostic CPM; `TRIAL_STARTUP_PLAN` and `ONBOARDING_PLAN`) + `TimelinePage.vue`. The preflight and timeline logic and their tests were ported from PR #2. Exports use `createArtifact()` (fingerprinted JSON) and `csvCell()` from `lib/records.js`.
+- Shared helpers (use these; don't re-implement): `lib/storage.js` (`readJson`/`writeJson`), `lib/download.js`, the `lazy()` async-component helper in `App.vue`, and global `.tool-page` / `.panel` / `.metric` / `.field` / `.mini-btn` / `.primary-btn` / `.link-btn` / `.code-text` styles in `style.css`.
 - `frontend/src/components/ui/`: vendored shadcn-vue (Reka UI) and Inspira UI components. Restyle them through tokens; edit them only to fix bugs.
 - `DESIGN.md`: the design system. Follow it for any UI change: lowercase chrome, mono labels, one coral accent, hairlines instead of shadows, muted `--kg-*` category colors, and motion that respects `prefers-reduced-motion`.
 
@@ -29,6 +41,10 @@ Vue + Vite workspace in `frontend/`. See `README.md` for behavior and run instru
 - OpenAI mode stops the 24s demo playback as soon as the analysis returns, so follow-ups aren't blocked; the graph and sidebar follow the analysis status (`effectiveStatus`).
 - The vendored `Command` has a cmdk-style `shouldFilter` prop and an `update:searchTerm` emit. The palette ranks results itself.
 - The embedding model (~23 MB) comes from the Hugging Face CDN on first use and is then browser-cached. The onnx wasm (~27 MB) ships in `dist`. For a fully offline venue, warm the cache before judging.
+- `.mono` lowercases text. That's right for chrome, wrong for user content: inputs and textareas are exempt, and extracted or user data uses `.code-text`.
+- A tab opened before a deploy can request chunk files that no longer exist. `main.js` reloads once on `vite:preloadError`, and `lazy()` shows a retry otherwise.
+- Persisted keys: `microfish:preflight`, `microfish:timeline`, `microfish:study-build`, settings and the workspace. Keep `deleteAllData()` in `useResearch.js` in sync when adding one.
+- Easter egg: ↑ ↑ ↓ ↓ K I N G outside text fields shows `fx/JumpScare.vue` (no flashing; reduced motion means no zoom or sound).
 - Vue Flow's `fit-view-on-init` runs before the pane settles. `SimulationGraph` re-fits on resize, so keep that.
 
 ## Skills (say the trigger phrase)
@@ -38,6 +54,7 @@ Vue + Vite workspace in `frontend/`. See `README.md` for behavior and run instru
 - "write the devpost" / "submission": `devpost-writeup`. `SUBMISSION.md` built from real code and commits, honest about what's mocked.
 - "what should we cut" / "N hours left": `scope-cut`. Impact versus effort triage and a timeboxed plan.
 - "deploy" / "give me a link": `deploy-preview`. Static preview deploy after confirming the provider.
+- "de-slop" / before finishing any change: `de-slop`. Audit the diff for code and writing anti-patterns (duplicates, primitive obsession, over-abstraction, mirrored tests, redundant comments, inconsistent conventions, hype copy). Read and extend `.claude/skills/de-slop/LOG.md`.
 
 ## Guardrails, privacy and data (non-negotiable)
 

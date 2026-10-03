@@ -11,6 +11,13 @@ npm test           # frontend + backend suites
 npm start          # build, then serve everything from one Express process
 ```
 
+## What it does (Track 2: AI for clinical research)
+
+- **Stakeholder rehearsal:** describe a protocol or operations change (fewer visits, e-consent, evening hours) and see how participants, sites, oversight, sponsor and data teams would likely respond, as a knowledge graph plus a stance table.
+- **Study build:** paste a protocol's schedule of activities to get a visit × assessment matrix, a draft CRF, edit checks and participant/site burden. Paste a source note to get extracted values and auto-generated queries (out of range, missing, outside visit window).
+- **Document preflight:** local checks across protocol, consent and onboarding text: mismatched study IDs or visit counts, outdated versions, open questions, each with its source line.
+- **Start-up timeline:** delay any start-up step (ethics review, contracts, EDC build…) and see whether first participant in moves.
+
 ## Modes
 
 - **Demo (default):** 12 illustrative agents and a local playback. No model is called and nothing leaves the browser.
