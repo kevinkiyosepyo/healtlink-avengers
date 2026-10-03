@@ -6,4 +6,9 @@ dist/
 .DS_Store
 .vite/
 .playwright-cli/
-output/playwright/
+/output/
+.vercel/
+
+# Private conversation and personal onboarding source material.
+/HealthLink-Hackathon-Second-Opinion-Dossier.md
+/Trial-Researcher-Personalized-Concept.md

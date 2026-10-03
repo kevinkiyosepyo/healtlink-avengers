@@ -27,6 +27,7 @@ import { ERROR_COPY, useResearch } from "./composables/useResearch.js";
 import AnalysisPanel from "./components/AnalysisPanel.vue";
 import { BLOCK_REASONS } from "./lib/guardrails.js";
 import { useSimulationWorkspace } from "./composables/useSimulationWorkspace.js";
+import { useResearcherAccount } from "./composables/useResearcherAccount.js";
 import { PROMPT_LIMIT, TITLE_LIMIT } from "./lib/simulationWorkspace.js";
 
 // Views load on demand; if a chunk can't be fetched (e.g. a stale tab after a
@@ -213,6 +214,7 @@ const canSubmit = computed(
   () => Boolean(activeSession.value?.draft.trim()) && !isRunning.value && !checking.value,
 );
 const research = useResearch(sessions);
+const account = useResearcherAccount();
 const settingsOpen = ref(false);
 watch(settingsOpen, (open) => {
   if (open) settingsMounted.value = true;
@@ -445,6 +447,7 @@ watch(
       @palette="paletteOpen = true"
       @settings="settingsOpen = true"
       :current-page="currentPage"
+      :user="account.account.user"
       @navigate="navigate"
     />
 
@@ -478,6 +481,7 @@ watch(
             settingsOpen = true;
           "
           :current-page="currentPage"
+          :user="account.account.user"
           @navigate="navigate"
           @close="sidebarOpen = false"
         />
@@ -755,7 +759,7 @@ watch(
       </main>
     </div>
 
-    <SettingsDialog v-if="settingsMounted" v-model:open="settingsOpen" :research="research" />
+    <SettingsDialog v-if="settingsMounted" v-model:open="settingsOpen" :research="research" :account="account" />
 
     <Dialog v-model:open="paletteOpen">
       <DialogContent class="overlay-surface overflow-hidden p-0" :show-close-button="false">

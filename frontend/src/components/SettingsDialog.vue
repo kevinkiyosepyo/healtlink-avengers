@@ -6,6 +6,8 @@ import StatusBadge from "./StatusBadge.vue";
 const open = defineModel("open", { type: Boolean, default: false });
 const props = defineProps({
   research: { type: Object, required: true },
+  // useResearcherAccount(): Google sign-in state and actions.
+  account: { type: Object, required: true },
 });
 
 const confirmDelete = ref(false);
@@ -31,6 +33,31 @@ function onKeyInput() {
     <DialogContent class="overlay-surface settings sm:max-w-[520px]" :show-close-button="false">
       <DialogTitle class="dialog-title">model &amp; data</DialogTitle>
       <DialogDescription class="dialog-copy">choose how scenarios are analysed and control what is stored on this device.</DialogDescription>
+
+      <section class="block">
+        <div class="row-between">
+          <p class="label mono">account</p>
+          <StatusBadge
+            size="sm"
+            :status="account.account.loading ? 'running' : account.account.user ? 'completed' : 'draft'"
+            :label="account.account.loading ? 'checking' : account.account.user ? 'signed in' : 'not signed in'"
+          />
+        </div>
+        <div v-if="account.account.user" class="account-row">
+          <span class="avatar">{{ (account.account.user.name || account.account.user.email || "r").charAt(0).toLowerCase() }}</span>
+          <span class="account-text">
+            <span>{{ account.account.user.name || "researcher" }}</span>
+            <span class="mono faint">{{ account.account.user.email }}</span>
+          </span>
+          <button class="ghost-btn mono" type="button" :disabled="account.busy.value" @click="account.signout()">sign out</button>
+        </div>
+        <template v-else-if="!account.account.loading">
+          <button v-if="account.account.providers.google" class="primary-btn" type="button" :disabled="account.busy.value" @click="account.google()">sign in with google</button>
+          <p v-else class="hint">google sign-in isn't configured on this server. everything else works locally.</p>
+        </template>
+        <p class="hint">signing in identifies you; your chats and records still stay in this browser.</p>
+        <p v-if="account.error.value" class="error">{{ account.error.value }}</p>
+      </section>
 
       <section class="block">
         <p class="label mono">analysis mode</p>
@@ -226,6 +253,18 @@ function onKeyInput() {
 .danger-btn.solid {
   background: var(--danger);
   color: #fff;
+}
+.account-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.account-text {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  color: var(--ink);
+  font-size: 13px;
 }
 .footer {
   display: flex;

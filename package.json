@@ -1,11 +1,22 @@
 {
   "name": "microfish",
+  "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "install:all": "npm --prefix frontend install && npm --prefix backend install",
-    "dev": "npm --prefix backend run dev & npm --prefix frontend run dev",
+    "install:all": "npm install && npm --prefix frontend install && npm --prefix backend install",
+    "dev": "npm --prefix frontend run dev",
+    "dev:server": "npm --prefix backend run dev",
     "build": "npm --prefix frontend run build",
     "start": "npm run build && npm --prefix backend start",
-    "test": "npm --prefix frontend test && npm --prefix backend test"
+    "test": "npm run test:server && npm --prefix frontend test && npm --prefix backend test",
+    "test:server": "node --test tests/server*.test.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@auth/core": "^0.41.3",
+    "jose": "^6.2.12"
   }
 }

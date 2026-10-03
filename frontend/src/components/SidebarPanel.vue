@@ -16,6 +16,7 @@ const props = defineProps({
   similarIds: { type: Set, default: () => new Set() },
   statusOf: { type: Function, default: null },
   currentPage: { type: String, default: "simulations" },
+  user: { type: Object, default: null },
   searchStatus: { type: String, default: "" },
   activeId: { type: String, default: null },
   runningCount: { type: Number, default: 0 },
@@ -133,11 +134,11 @@ const isMac =
         >{{ runningCount }} running — other chats keep going
       </p>
       <p v-else>room for every what-if — runs continue in parallel</p>
-      <div class="identity">
-        <span class="avatar">m</span>
-        <span>my workspace</span>
-        <span class="pill mono" style="margin-left: auto">local demo</span>
-      </div>
+      <button class="identity" @click="emit('settings')">
+        <span class="avatar">{{ user ? (user.name || user.email || "r").charAt(0).toLowerCase() : "m" }}</span>
+        <span class="identity-name">{{ user ? user.name || user.email : "my workspace" }}</span>
+        <span class="pill mono" style="margin-left: auto">{{ user ? "signed in" : "sign in" }}</span>
+      </button>
     </div>
   </aside>
 </template>

@@ -1177,7 +1177,7 @@ textarea.mono,
   align-items: center;
   gap: 10px;
 }
-.tool-page .hint {
+.hint {
   margin: 0;
   color: var(--faint);
   font-size: 11px;
@@ -1263,4 +1263,22 @@ textarea.mono,
 .tool-page > .scope {
   max-width: 1200px;
   margin: 16px auto 0;
+}
+button.identity {
+  width: 100%;
+  padding: 4px;
+  margin: -4px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+button.identity:hover {
+  background: var(--surface-hover);
+}
+.identity-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

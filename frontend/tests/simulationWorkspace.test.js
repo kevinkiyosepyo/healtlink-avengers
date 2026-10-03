@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { createWorkspaceController, STORAGE_KEY, PROMPT_LIMIT, TITLE_LIMIT, SESSION_LIMIT, RUN_LIMIT } from '../src/lib/simulationWorkspace.js'
+import { createWorkspaceController, STORAGE_KEY, PROMPT_LIMIT, TITLE_LIMIT, SESSION_LIMIT, RUN_LIMIT, AI_RESPONSE_LIMIT } from '../src/lib/simulationWorkspace.js'
+import { createOpenAIRunTransport } from '../src/composables/useSimulationWorkspace.js'
 
 function fixture(initialStorage) {
   let time = 1000000
@@ -276,4 +277,186 @@ test('same-tab edits keep saving without false conflict notices', () => {
   assert.equal(restored.state.activeId, first)
   assert.equal(restored.state.sessions.find(session => session.id === first).draft, 'Draft two')
   assert.equal(restored.state.sessions.find(session => session.id === second.id).title, 'Another chat')
+})
+
+test('real runs never advance with the demo timer and completion targets the original chat', () => {
+  const { controller: c, advance, reload } = fixture()
+  const first = c.state.sessions[0]
+  const real = c.startRun(first.id, 'Review my onboarding plan', { mode: 'openai' })
+  const second = c.createSession()
+  const demo = c.startRun(second.id, 'A local walkthrough')
+  advance(120000)
+  c.tick()
+  assert.equal(real.status, 'running')
+  assert.equal(real.progress, 0)
+  assert.equal(real.agentCount, 3)
+  assert.equal(real.stage, 'Waiting for OpenAI agents')
+  assert.doesNotMatch(first.messages[1].content, /demo|sample agents/i)
+  assert.equal(demo.status, 'completed')
+  assert.equal(c.finishRun(second.id, real.id, { content: 'Wrong chat' }), false)
+  assert.equal(c.finishRun(first.id, real.id, { content: 'Three reviewers identified a missing prerequisite.', model: 'test-model', agentCount: 3 }), true)
+  assert.equal(real.status, 'completed')
+  assert.equal(real.progress, 100)
+  assert.equal(real.model, 'test-model')
+  assert.equal(real.stage, 'AI exploration complete')
+  assert.equal(first.messages[1].content, 'Three reviewers identified a missing prerequisite.')
+  assert.match(second.messages[1].content, /Demo complete/)
+  assert.equal(c.state.activeId, second.id)
+  const recovered = reload().state.sessions.find(session => session.id === first.id)
+  assert.equal(recovered.runs[0].mode, 'openai')
+  assert.equal(recovered.runs[0].model, 'test-model')
+  assert.equal(recovered.messages[1].content, first.messages[1].content)
+})
+
+test('AI failure restores a retry draft without replacing a newer user draft', () => {
+  const { controller: c, reload } = fixture()
+  const first = c.state.sessions[0]
+  const run = c.startRun(first.id, 'Keep my question', { mode: 'openai' })
+  assert.equal(c.failRun(first.id, run.id, 'Sign in again to retry.'), true)
+  assert.equal(first.draft, 'Keep my question')
+  assert.equal(run.status, 'failed')
+  assert.equal(run.stage, 'Could not complete')
+  assert.match(first.messages[1].content, /Sign in again/)
+  assert.equal(c.finishRun(first.id, run.id, { content: 'Late success' }), false)
+  assert.equal(c.failRun(first.id, run.id, 'Late failure'), false)
+  const failed = reload().state.sessions[0]
+  assert.equal(failed.runs[0].status, 'failed')
+  assert.match(failed.messages[1].content, /Sign in again/)
+
+  const retry = c.startRun(first.id, first.draft, { mode: 'openai' })
+  c.setDraft(first.id, 'A different follow-up I am writing')
+  c.failRun(first.id, retry.id, 'Please retry later.')
+  assert.equal(first.draft, 'A different follow-up I am writing')
+})
+
+test('stopped and deleted AI runs reject late responses without touching a concurrent run', () => {
+  const { controller: c } = fixture()
+  const first = c.state.sessions[0]
+  const stopped = c.startRun(first.id, 'Stop me', { mode: 'openai' })
+  const second = c.createSession()
+  const active = c.startRun(second.id, 'Keep me', { mode: 'openai' })
+  assert.equal(c.stopRun(first.id), true)
+  assert.equal(stopped.status, 'stopped')
+  assert.equal(first.draft, stopped.prompt)
+  assert.equal(c.finishRun(first.id, stopped.id, { content: 'Too late' }), false)
+  assert.equal(c.failRun(first.id, stopped.id, 'Too late'), false)
+  assert.equal(active.status, 'running')
+  assert.match(first.messages[1].content, /Stopped waiting for this AI run/)
+  c.deleteSession(second.id)
+  assert.equal(c.finishRun(second.id, active.id, { content: 'Too late' }), false)
+  assert.equal(c.failRun(second.id, active.id, 'Too late'), false)
+})
+
+test('reloading real work marks it interrupted instead of inventing completion', () => {
+  const { controller: c, advance, reload } = fixture()
+  const session = c.state.sessions[0]
+  c.startRun(session.id, 'Recover this question', { mode: 'openai' })
+  advance(3600000)
+  const restored = reload()
+  const recovered = restored.state.sessions[0]
+  assert.equal(recovered.runs[0].status, 'stopped')
+  assert.equal(recovered.runs[0].progress, 0)
+  assert.equal(recovered.draft, 'Recover this question')
+  assert.match(recovered.messages[1].content, /interrupted when the page reloaded/)
+  restored.tick()
+  assert.equal(recovered.runs[0].status, 'stopped')
+  const retry = restored.startRun(session.id, recovered.draft, { mode: 'openai' })
+  restored.finishRun(session.id, retry.id, { content: 'Successful retry', model: 'test-model' })
+  assert.equal(reload().state.sessions[0].draft, '', 'older interrupted prompts must not come back after a successful retry')
+})
+
+test('AI responses persist with a bounded response and model, and empty responses fail clearly', () => {
+  const { controller: c, reload } = fixture()
+  const session = c.state.sessions[0]
+  const first = c.startRun(session.id, 'Long answer', { mode: 'openai' })
+  c.finishRun(session.id, first.id, { content: 'x'.repeat(AI_RESPONSE_LIMIT + 100), model: 'm'.repeat(120) })
+  assert.equal(session.messages[1].content.length, AI_RESPONSE_LIMIT)
+  assert.equal(first.model.length, 100)
+  assert.equal(reload().state.sessions[0].messages[1].content.length, AI_RESPONSE_LIMIT)
+  const empty = c.startRun(session.id, 'No answer', { mode: 'openai' })
+  c.finishRun(session.id, empty.id, { content: '  ' })
+  assert.equal(empty.status, 'failed')
+  assert.equal(session.draft, 'No answer')
+  assert.match(session.messages.at(-1).content, /empty response/)
+})
+
+function transportFixture(controller) {
+  const calls = []
+  const transport = createOpenAIRunTransport(controller, {
+    fetchImpl(url, options) {
+      return new Promise((resolve, reject) => calls.push({ url, options, resolve, reject }))
+    },
+  })
+  return { transport, calls }
+}
+const drainRequests = () => new Promise(resolve => setImmediate(resolve))
+const response = (content, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => content })
+
+test('AI transport returns synchronously, sends only the current prompt, and completes independently of selection', async () => {
+  const { controller: c } = fixture()
+  const first = c.state.sessions[0]
+  const previous = c.startRun(first.id, 'Private historical question', { mode: 'openai' })
+  c.finishRun(first.id, previous.id, { content: 'Private historical answer' })
+  const { transport, calls } = transportFixture(c)
+  const run = transport.startOpenAIRun(first.id, 'Current question')
+  assert.equal(run.status, 'running')
+  assert.equal(typeof run.then, 'undefined')
+  assert.equal(transport.startOpenAIRun(first.id, 'Duplicate'), null)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].url, '/api/simulate')
+  assert.equal(calls[0].options.credentials, 'same-origin')
+  assert.equal(calls[0].options.method, 'POST')
+  assert.deepEqual(JSON.parse(calls[0].options.body), { prompt: 'Current question' })
+  const second = c.createSession()
+  calls[0].resolve(response({ content: 'A real answer', model: 'test-model', agentCount: 3 }))
+  await drainRequests()
+  assert.equal(run.status, 'completed')
+  assert.equal(first.messages.at(-1).content, 'A real answer')
+  assert.equal(second.messages.length, 0)
+  assert.equal(c.state.activeId, second.id)
+})
+
+test('AI transport cancels stopped/deleted requests and ignores their late successful responses', async () => {
+  const { controller: c } = fixture()
+  const { transport, calls } = transportFixture(c)
+  const first = c.state.sessions[0]
+  const stopped = transport.startOpenAIRun(first.id, 'Stop this request')
+  const second = c.createSession()
+  const deleted = transport.startOpenAIRun(second.id, 'Delete this request')
+  const third = c.createSession()
+  const active = transport.startOpenAIRun(third.id, 'Complete this request')
+  transport.stopRun(first.id)
+  transport.deleteSession(second.id)
+  assert.equal(calls[0].options.signal.aborted, true)
+  assert.equal(calls[1].options.signal.aborted, true)
+  assert.equal(calls[2].options.signal.aborted, false)
+  for (const call of calls) call.resolve(response({ content: 'Server result', model: 'test-model' }))
+  await drainRequests()
+  assert.equal(stopped.status, 'stopped')
+  assert.match(first.messages.at(-1).content, /Stopped waiting for this AI run/)
+  assert.equal(c.state.sessions.some(session => session.runs.some(run => run.id === deleted.id)), false)
+  assert.equal(active.status, 'completed')
+})
+
+test('AI transport keeps authentication and malformed-response failures retryable', async () => {
+  const { controller: c } = fixture()
+  const { transport, calls } = transportFixture(c)
+  const session = c.state.sessions[0]
+  const expired = transport.startOpenAIRun(session.id, 'Authenticated question')
+  calls[0].resolve(response({}, 401))
+  await drainRequests()
+  assert.equal(expired.status, 'failed')
+  assert.equal(expired.mode, 'openai')
+  assert.equal(session.draft, 'Authenticated question')
+  assert.match(session.messages.at(-1).content, /Sign in again/)
+  const malformed = transport.startOpenAIRun(session.id, session.draft)
+  calls[1].resolve(response({ model: 'test-model' }))
+  await drainRequests()
+  assert.equal(malformed.status, 'failed')
+  assert.match(session.messages.at(-1).content, /empty response/)
+  const network = transport.startOpenAIRun(session.id, session.draft)
+  calls[2].reject(new TypeError('Failed to fetch'))
+  await drainRequests()
+  assert.equal(network.status, 'failed')
+  assert.equal(session.draft, 'Authenticated question')
 })
