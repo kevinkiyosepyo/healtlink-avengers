@@ -37,3 +37,7 @@ The deterministic controller tests cover concurrent runs, isolation, stop/delete
 ## Connecting a simulation engine
 
 `frontend/src/lib/simulationWorkspace.js` owns session-scoped run IDs and lifecycle changes; `frontend/src/composables/useSimulationWorkspace.js` connects it to Vue. Replace the demo `startRun`/`tick` lifecycle with backend job creation and event or polling updates, routing all results by session and run ID. Wire cancellation to the backend, and replace illustrative assistant messages and graph data with real output. AI providers, document ingestion, server persistence, and authentication are not connected. Keep secrets on the server, never in client code or committed `.env` files.
+
+## Deploy to Vercel
+
+The root `vercel.json` sets the Vite framework, runs `npm ci --prefix frontend` and `npm run build --prefix frontend`, and publishes `frontend/dist`. Run `vercel link` from the repository root to connect the Vercel project, then use `vercel deploy` for a preview or `vercel deploy --prod` for production. Connect the GitHub repository in Vercel Project Settings to enable automatic deployments from Git branches.
