@@ -10,6 +10,12 @@ npm install
 npm run dev
 ```
 
+## Interactive simulation graph
+
+Choose **Graph** or **Split** to explore an interactive network. Drag nodes or the canvas, scroll or pinch to zoom, and click a node for its properties and connections. Search jumps to matching nodes; the entity legend filters types. Controls include pinning, label visibility, pause/resume, fit, reset, and fullscreen. Labels avoid overlaps and remain readable while zooming. Keyboard users can Tab to a node and press Enter to inspect it; on the canvas, arrow keys pan, `+`/`-` zoom, `0` fits, and Escape closes details. Reduced-motion preferences disable automatic layout animation.
+
+An illustrative sample graph is available before starting a run. Run graphs are seeded per run and update without resetting the layout as progress changes. Graph selections and layout controls reset when switching chats. Data remains a local demo, not real simulation findings.
+
 ## Current behavior
 
 Runs are explicitly labeled local demos: each lasts about 24 seconds and illustrates 12 sample agents. Multiple chats can run concurrently; each chat allows one active run. Stop affects only that chat. Follow-up questions start additional runs in the same conversation. The graph is an illustrative topology, not an AI-generated result.
@@ -24,6 +30,16 @@ The schedule starts October 5, 2026 and uses Monday–Friday working days withou
 
 `frontend/src/lib/bottleneckTimeline.js` contains the dependency calculation and sample tasks; `frontend/src/components/BottleneckTimeline.vue` provides the page.
 
+## Document preflight
+
+Open **Document preflight** in the workspace sidebar, or visit `/#/preflight`. The page starts with a fictional REST-101 packet and six findings across missing items, conflicting instructions, outdated versions, and unanswered questions. Filter findings, expand their exact source lines, edit the documents, mark findings reviewed, and export a Markdown review. Editing a packet clears its previous findings until you rerun the check. Reviewing a finding records its review status; it does not change the source document.
+
+Add `.txt`, `.md`, or `.markdown` files, or paste document text. The first upload or new pasted document replaces the example packet, with Undo available. Document type and version are editable; filename-based type guesses should be checked. PDF and Word parsing are not included. The limits are 12 documents, 100,000 characters per document, and 500,000 characters per packet. Documents and review state save in browser local storage; the checker sends no document text to a server.
+
+The local rules check for protocol, consent, and onboarding documents; explicit `Study ID:` and onboarding `Contact owner:` fields; conflicting study IDs and `Clinic visits:` counts; numeric versions for the same study/document type; and unresolved `TODO`, `TBD`, `[?]`, or `Question:` lines. An `Answer:` on the same or next nonempty line can resolve a question. Text checks support basic Markdown field formatting. Version numbers alone do not establish approval, and no findings does not establish completeness. These checks do not perform semantic AI review or grant institutional approval.
+
+`frontend/src/lib/documentPreflight.js` contains the rules and example packet; `frontend/src/components/DocumentPreflight.vue` provides the page.
+
 ## Verification
 
 ```sh
@@ -36,8 +52,9 @@ The deterministic controller tests cover concurrent runs, isolation, stop/delete
 
 ## Connecting a simulation engine
 
-`frontend/src/lib/simulationWorkspace.js` owns session-scoped run IDs and lifecycle changes; `frontend/src/composables/useSimulationWorkspace.js` connects it to Vue. Replace the demo `startRun`/`tick` lifecycle with backend job creation and event or polling updates, routing all results by session and run ID. Wire cancellation to the backend, and replace illustrative assistant messages and graph data with real output. AI providers, document ingestion, server persistence, and authentication are not connected. Keep secrets on the server, never in client code or committed `.env` files.
+`frontend/src/lib/simulationWorkspace.js` owns session-scoped run IDs and lifecycle changes; `frontend/src/composables/useSimulationWorkspace.js` connects it to Vue. Replace the demo `startRun`/`tick` lifecycle with backend job creation and event or polling updates, routing all results by session and run ID. Wire cancellation to the backend, and replace illustrative assistant messages and graph data with real output. AI providers, PDF/Word ingestion, server persistence, and authentication are not connected. Keep secrets on the server, never in client code or committed `.env` files.
+
 
 ## Deploy to Vercel
 
-The root `vercel.json` sets the Vite framework, runs `npm ci --prefix frontend` and `npm run build --prefix frontend`, and publishes `frontend/dist`. Run `vercel link` from the repository root to connect the Vercel project, then use `vercel deploy` for a preview or `vercel deploy --prod` for production. Connect the GitHub repository in Vercel Project Settings to enable automatic deployments from Git branches.
+The repository-root `vercel.json` configures Vercel to install dependencies from `frontend/`, run the Vite build there, and publish `frontend/dist`. Link the repository from the Vercel CLI with `vercel link`, then deploy a preview with `vercel deploy` or production with `vercel deploy --prod`. For automatic preview deployments on branches and production deployments from `main`, connect the `kevinkiyosepyo/healtlink-avengers` GitHub repository to the Vercel project in Project Settings.

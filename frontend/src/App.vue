@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import AppIcon from "./components/AppIcon.vue";
 import SimulationGraph from "./components/SimulationGraph.vue";
 import BottleneckTimeline from "./components/BottleneckTimeline.vue";
+import DocumentPreflight from "./components/DocumentPreflight.vue";
 import { useSimulationWorkspace } from "./composables/useSimulationWorkspace.js";
 import { PROMPT_LIMIT, TITLE_LIMIT } from "./lib/simulationWorkspace.js";
 
@@ -21,17 +22,18 @@ const {
 } = useSimulationWorkspace();
 const activeView = ref("Chat");
 function pageFromHash() {
-  return ({ "#/timeline": "timeline" })[window.location.hash] || "simulations";
+  return ({ "#/timeline": "timeline", "#/preflight": "preflight" })[window.location.hash] || "simulations";
 }
 const currentPage = ref(pageFromHash());
 const timelinePage = ref(null);
+const preflightPage = ref(null);
 function syncPage() {
   currentPage.value = pageFromHash();
   sidebarOpen.value = false;
   menuId.value = null;
 }
 function navigate(page) {
-  window.location.hash = ({ timeline: "/timeline" })[page] || "/simulations";
+  window.location.hash = ({ timeline: "/timeline", preflight: "/preflight" })[page] || "/simulations";
   currentPage.value = page;
   sidebarOpen.value = false;
   menuId.value = null;
@@ -41,6 +43,7 @@ onUnmounted(() => window.removeEventListener("hashchange", syncPage));
 watch(currentPage, async (page) => {
   await nextTick();
   if (page === "timeline") timelinePage.value?.focusHeading();
+  else if (page === "preflight") preflightPage.value?.focusHeading();
   else composer.value?.focus();
 });
 const search = ref("");
@@ -296,6 +299,16 @@ watch(
           <span>Bottleneck timeline</span>
           <AppIcon class="workspace-nav-arrow" name="arrow-up-right" :size="15" />
         </button>
+        <button
+          class="workspace-nav-button"
+          :class="{ active: currentPage === 'preflight' }"
+          :aria-current="currentPage === 'preflight' ? 'page' : undefined"
+          @click="navigate('preflight')"
+        >
+          <AppIcon name="document-check" :size="18" />
+          <span>Document preflight</span>
+          <AppIcon class="workspace-nav-arrow" name="arrow-up-right" :size="15" />
+        </button>
       </nav>
       <label class="search-box"
         ><AppIcon name="search" :size="16" /><input
@@ -401,7 +414,7 @@ watch(
             <AppIcon name="sidebar" /></button
           ><span class="breadcrumb-parent">Workspace</span
           ><span class="breadcrumb-divider">/</span
-          ><span class="current-title">{{ currentPage === 'timeline' ? 'Bottleneck timeline' : activeSession?.title }}</span>
+          ><span class="current-title">{{ currentPage === 'timeline' ? 'Bottleneck timeline' : currentPage === 'preflight' ? 'Document preflight' : activeSession?.title }}</span>
         </div>
         <div class="header-status">
           <span v-if="runningCount" class="running-badge" role="status"
@@ -411,6 +424,7 @@ watch(
         </div>
       </header>
       <BottleneckTimeline ref="timelinePage" v-show="currentPage === 'timeline'" />
+      <DocumentPreflight ref="preflightPage" v-show="currentPage === 'preflight'" />
       <main v-if="activeSession" v-show="currentPage === 'simulations'" class="workspace">
         <div class="workspace-toolbar">
           <div class="workspace-heading">
@@ -644,6 +658,7 @@ watch(
             aria-label="Simulation graph"
           >
             <SimulationGraph
+              :key="activeId"
               :run="latestRun"
               :session-title="activeSession.title"
             />
