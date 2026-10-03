@@ -5,10 +5,18 @@ A Vue and Vite workspace with ChatGPT-style simulation conversations. Create a n
 ## Run locally
 
 ```sh
-cd frontend
-npm install
-npm run dev
+npm run install:all
+npm run dev        # Vite dev server
+npm test           # frontend + backend suites
+npm start          # build, then serve everything from one Express process
 ```
+
+## Modes
+
+- **Demo (default):** 12 illustrative agents and a local playback. No model is called and nothing leaves the browser.
+- **Your OpenAI key:** open **model & data**, paste a key and verify it, then pick a model. Each scenario is screened (local rules plus OpenAI moderation), then all 11 stakeholder groups are scored in one structured request. The key and scenario go **directly from the browser to api.openai.com**; there is no microfish server-side key, proxy or database. The key stays in memory unless you opt into "remember for this tab".
+
+Every run is saved as a research record in IndexedDB, with prompt, guardrail results, provenance (model, temperature, seed, prompt version, latency, tokens) and a SHA-256 fingerprint. Export a run or the whole workspace as CSV (long format) or JSON. Deleting a chat deletes its records; **delete all local data** wipes everything.
 
 ## Current behavior
 

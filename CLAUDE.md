@@ -2,8 +2,10 @@
 
 Vue + Vite workspace in `frontend/`. See `README.md` for behavior and run instructions.
 
-- Dev: `cd frontend && npm install && npm run dev`
-- Verify: `cd frontend && npm test && npm run build`
+- Install: `npm run install:all`. Dev: `npm run dev` (Vite on :5173; Express on :8787 is optional in dev).
+- Verify: `npm test && npm run build` (frontend and backend suites).
+- Prod: `npm start` builds the frontend and serves it from one Express process with a strict CSP.
+- Modes: **demo** (the 12 illustrative agents, no model) or **bring-your-own OpenAI key**, entered in "model & data". The key goes browser → api.openai.com directly. There is no server-side key, proxy or database.
 
 ## Project map
 
@@ -11,6 +13,10 @@ Vue + Vite workspace in `frontend/`. See `README.md` for behavior and run instru
 - `frontend/src/App.vue`: shell, chat, composer, split view, dialogs, ⌘K palette.
 - `frontend/src/components/`: `SidebarPanel`, `SimulationGraph` (Vue Flow + d3-force knowledge graph), `AgentNode`, `fx/BootScreen`.
 - Semantic search (in-browser vector DB): `frontend/src/lib/semanticIndex.js` (Orama hybrid BM25 + vector index, diffed sync, unit-tested with a fake embedder), `frontend/src/workers/embed.worker.js` (transformers.js `all-MiniLM-L6-v2`, q8, off the main thread), `frontend/src/composables/useSemanticSearch.js` (lazy start after first paint, embeddings cached in IndexedDB by text hash). It powers the sidebar filter and the ⌘K palette, and keyword matches always show instantly.
+- Backend (`backend/`, Express 5): static hosting, SPA fallback, `GET /api/health`, and security headers (CSP `connect-src` limited to self, api.openai.com and the Hugging Face model CDN). Deliberately no data or model API.
+- Research flow: `frontend/src/lib/llm.js` (OpenAI client: strict JSON-schema output enumerating the 11 stakeholder ids, `parseAnalysis` fails closed, retries with backoff on 429/5xx, a retry without sampling params for models that reject them, moderation, model listing), `frontend/src/lib/records.js` (research records: canonical JSON plus a SHA-256 fingerprint, `verifyRecord`, long-format CSV with formula-injection protection), `frontend/src/composables/useResearch.js` (settings, key handling, the IndexedDB record store, guarded check → analyze, export, delete-all), `components/AnalysisPanel.vue`, `components/SettingsDialog.vue`.
+- Guardrails: `frontend/src/lib/guardrails.js`, the local screen (crisis, secrets, injection, PII, violence/unsafe, individual care, partisan framing) plus a keyword health-topic check for demo mode.
+- `frontend/src/lib/agents.js`: the fixed agents and relations shared by the graph and the analysis.
 - `frontend/src/components/ui/`: vendored shadcn-vue (Reka UI) and Inspira UI components. Restyle them through tokens; edit them only to fix bugs.
 - `DESIGN.md`: the design system. Follow it for any UI change: lowercase chrome, mono labels, one coral accent, hairlines instead of shadows, muted `--kg-*` category colors, and motion that respects `prefers-reduced-motion`.
 
@@ -20,6 +26,7 @@ Vue + Vite workspace in `frontend/`. See `README.md` for behavior and run instru
 - GSAP and `requestAnimationFrame` pause in background tabs. Anything that gates the UI (the boot screen) needs a timer fallback.
 - Geist Mono lacks some glyphs (e.g. `⮡`). Draw rare symbols as inline SVG or a CSS mask.
 - MiniLM cosine scores for short queries are low (real matches are around 0.2–0.3), so the semantic threshold is 0.2. Don't "fix" it back up.
+- OpenAI mode stops the 24s demo playback as soon as the analysis returns, so follow-ups aren't blocked; the graph and sidebar follow the analysis status (`effectiveStatus`).
 - The vendored `Command` has a cmdk-style `shouldFilter` prop and an `update:searchTerm` emit. The palette ranks results itself.
 - The embedding model (~23 MB) comes from the Hugging Face CDN on first use and is then browser-cached. The onnx wasm (~27 MB) ships in `dist`. For a fully offline venue, warm the cache before judging.
 - Vue Flow's `fit-view-on-init` runs before the pane settles. `SimulationGraph` re-fits on resize, so keep that.
@@ -31,6 +38,16 @@ Vue + Vite workspace in `frontend/`. See `README.md` for behavior and run instru
 - "write the devpost" / "submission": `devpost-writeup`. `SUBMISSION.md` built from real code and commits, honest about what's mocked.
 - "what should we cut" / "N hours left": `scope-cut`. Impact versus effort triage and a timeboxed plan.
 - "deploy" / "give me a link": `deploy-preview`. Static preview deploy after confirming the provider.
+
+## Guardrails, privacy and data (non-negotiable)
+
+- Scope is community-level healthcare and public-health scenarios only. Order of checks: `screenPrompt` (local) → demo: health-topic keywords / OpenAI: moderation on the input → the model's own `in_scope` check (schema enum) → moderation on the generated text (flagged text is redacted, scores kept).
+- The OpenAI key lives in memory by default. The opt-in "remember" uses sessionStorage only. Never write it to localStorage, IndexedDB, logs, records or exports, and never route it through the backend.
+- Every run gets a research record (demo runs too). Records carry provenance (resolved model, temperature, seed, prompt version, system fingerprint, tokens, latency, guardrail results) and a SHA-256 fingerprint. Don't add fields without bumping `RECORD_SCHEMA_VERSION`.
+- Caching: identical analyses (same prompt, model, params and prompt version) are served from existing records via `analysisKey`; there is no separate cache store. "re-run fresh" bypasses it. Deleting a chat deletes its records, and with them any cached output; semantic-search embeddings are pruned to live text.
+- Label model output honestly: uncited, confidence self-reported, not medical advice.
+- When adding guardrail patterns, add both a blocked case and a legitimate look-alike to `tests/guardrails.test.js`.
+- RAG and knowledge distillation were considered. Distillation isn't worth it here. RAG ("bring your own sources", local chunking and embedding, cited `[S1]` passages) is the recommended next step for accuracy; ask before building it.
 
 ## Hackathon working rules
 
