@@ -1,4 +1,4 @@
-import { computed, reactive, ref, watch } from "vue";
+import { computed, markRaw, reactive, ref, watch } from "vue";
 import { isHealthTopic, screenPrompt } from "../lib/guardrails.js";
 import { LlmError, PROMPT_VERSION, analyzeScenario, listModels, moderate } from "../lib/llm.js";
 import { analysisKey, createRecord, recordsToCsv } from "../lib/records.js";
@@ -6,7 +6,7 @@ import { downloadText, stamp } from "../lib/download.js";
 import { readJson, writeJson } from "../lib/storage.js";
 import { STORAGE_KEY as WORKSPACE_KEY } from "../lib/simulationWorkspace.js";
 import { recordStorage } from "../lib/recordStorage.js";
-import { runDeliberation } from "../lib/evidence/deliberation.js";
+import { gatherEvidence, runDeliberation } from "../lib/evidence/deliberation.js";
 import { useLibrary } from "./useLibrary.js";
 
 const SETTINGS_KEY = "microfish:settings";
@@ -73,7 +73,7 @@ export function useResearch(sessions) {
     try {
       for (const [runId, record] of await recordStorage.load()) {
         if (!isRecordLive(record)) continue;
-        records[runId] = record;
+        records[runId] = markRaw(record);
         indexRecord(record);
         status[runId] = record.error ? "error" : record.analysis?.inScope === false ? "blocked" : "ready";
       }
@@ -117,7 +117,9 @@ export function useResearch(sessions) {
     }
     // Replacing a record (e.g. adding its deliberation) keeps the run's status.
     unindexRecord(record.runId);
-    records[record.runId] = record;
+    // Records are immutable snapshots (replaced, never mutated), so skip deep
+    // reactivity: large deliberations would otherwise get thousands of proxies.
+    records[record.runId] = markRaw(record);
     indexRecord(record);
     return record;
   }
@@ -207,6 +209,9 @@ export function useResearch(sessions) {
       const hit = fresh ? null : records[byAnalysisKey.get(key)];
       let result = hit ? { analysis: JSON.parse(JSON.stringify(hit.analysis)), provenance: hit.provenance } : null;
       const cached = Boolean(hit);
+      // Speculative prefetch: gather evidence while the analysis (and its
+      // scope check) runs. Discarded if the scenario turns out out of scope.
+      const prefetch = !hit?.deliberation && settings.evidence ? startEvidence(run.id, run.prompt, session.id) : null;
       if (!result) {
         result = await analyzeScenario({ apiKey: apiKey.value.trim(), ...params });
         // Output moderation: never keep generated text that moderation flags.
@@ -222,6 +227,11 @@ export function useResearch(sessions) {
       }
       const inScope = result.analysis.inScope;
       status[run.id] = inScope ? "ready" : "blocked";
+      if (!inScope && prefetch) {
+        // Out of scope: drop the speculative evidence and its progress readout.
+        delete progress[run.id];
+        void prefetch.then(() => delete progress[run.id]);
+      }
       return saveRecord(
         await createRecord({
           ...base,
@@ -234,7 +244,7 @@ export function useResearch(sessions) {
         }),
       ).then((record) => {
         // Not awaited: the analysis is usable now; the debate fills in later.
-        if (record && inScope && settings.evidence && !record.deliberation) void deliberate(run.id);
+        if (record && inScope && settings.evidence && !record.deliberation) void deliberate(run.id, prefetch);
         return record;
       });
     } catch (error) {
@@ -245,31 +255,39 @@ export function useResearch(sessions) {
   }
   // ---------- evidence deliberation ----------
   const progress = reactive({}); // runId -> { stage, detail }
-  async function deliberate(runId) {
+  const deliberating = new Set();
+  function evidenceOptions(sessionId) {
+    const library = useLibrary();
+    return { apiKey: apiKey.value.trim(), model: settings.model, seed: settings.seed, useWeb: settings.web, searchLibrary: (queries) => library.searchSources(queries, sessionId) };
+  }
+  function startEvidence(runId, prompt, sessionId) {
+    return gatherEvidence({ ...evidenceOptions(sessionId), prompt, onEvent: (event) => (progress[runId] = event) }).catch((error) => ({ error }));
+  }
+  async function deliberate(runId, prefetched = null) {
     const record = records[runId];
-    if (!record || record.mode !== "openai" || record.analysis?.inScope !== true || progress[runId]) return;
-    progress[runId] = { stage: "planning", detail: "starting" };
+    if (!record || record.mode !== "openai" || record.analysis?.inScope !== true || deliberating.has(runId)) return;
+    deliberating.add(runId);
+    progress[runId] ??= { stage: "planning", detail: "starting" };
     let deliberation;
     try {
       deliberation = await runDeliberation({
-        apiKey: apiKey.value.trim(),
-        model: settings.model,
+        ...evidenceOptions(record.sessionId),
+        evidence: prefetched,
         prompt: record.prompt,
-        seed: settings.seed,
-        useWeb: settings.web,
-        searchLibrary: useLibrary().searchSources,
         onEvent: (event) => (progress[runId] = event),
       });
       // Output moderation over every generated sentence; flagged text is removed, numbers kept.
       const texts = [deliberation.consensus.decision, deliberation.consensus.calculation, ...deliberation.consensus.key_points.map((p) => p.text),
         ...deliberation.openings.flatMap((o) => [o.position, o.calculation, ...o.claims.map((c) => c.text)]),
         ...deliberation.rebuttals.flatMap((r) => [r.revised_position, ...r.responses.map((x) => x.point)])];
+      useLibrary().rememberCited(record.sessionId, deliberation);
       if ((await moderate(apiKey.value.trim(), texts.join("\n"))).length) deliberation = { ...deliberation, redacted: true, openings: [], rebuttals: [], consensus: { ...deliberation.consensus, decision: "", calculation: "", key_points: [] } };
     } catch (error) {
       if (error.code === "auth") keyStatus.value = "invalid";
       deliberation = { error: error.code ?? "unavailable" };
     } finally {
       delete progress[runId];
+      deliberating.delete(runId);
     }
     const current = records[runId];
     if (!current) return;

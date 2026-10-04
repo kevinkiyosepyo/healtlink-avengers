@@ -48,7 +48,7 @@ export function useLibrary() {
         if (/\.pdf$/i.test(file.name) || file.type === "application/pdf") {
           busy.value = { name: file.name, done: 0, total: 0 };
           const { extractPdfText } = await import("../lib/pdfText.js");
-          const { text, pages } = await extractPdfText(file);
+          const { text, pages } = await extractPdfText(file, { onPage: (done, total) => (busy.value = { name: `${file.name} (reading pages)`, done, total }) });
           await addText(file.name, text, pages, "pdf");
         } else if (TEXT_TYPES.test(file.name) || file.type.startsWith("text/")) {
           await addText(file.name, await file.text());
@@ -77,9 +77,20 @@ export function useLibrary() {
   }
 
   /** For the deliberation: queries → citable Sources, or [] when off/empty. */
-  async function searchSources(queries) {
+  async function searchSources(queries, sessionId = null) {
     if (!enabled.value || !library.size()) return [];
-    return hitsToSources(await library.search(queries));
+    return hitsToSources(await library.search(queries, { sessionId }));
+  }
+
+  /** Remember the library passages a chat's deliberation cited (boosts follow-ups). */
+  function rememberCited(sessionId, deliberation) {
+    const cited = new Set([
+      ...(deliberation.consensus?.key_points ?? []).flatMap((p) => p.sources),
+      ...(deliberation.openings ?? []).flatMap((o) => o.claims.flatMap((c) => c.sources)),
+      ...(deliberation.rebuttals ?? []).flatMap((r) => r.responses.flatMap((x) => x.sources)),
+    ]);
+    const locations = (deliberation.pack ?? []).filter((s) => s.kind === "document" && cited.has(s.sid) && s.location).map((s) => s.location);
+    library.remember(sessionId, locations);
   }
 
   function setEnabled(value) {
@@ -98,6 +109,8 @@ export function useLibrary() {
     remove,
     search: (query) => library.search([query], { k: 8, minScore: 0.2 }),
     searchSources,
+    rememberCited,
+    stats: () => library.stats(),
     count: computed(() => documents.value.length),
     chunkCount: computed(() => documents.value.reduce((n, d) => n + d.chunks, 0)),
   };

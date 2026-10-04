@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { abstractFromInvertedIndex, normalizeClinicalTrial, normalizeEuropePmc, normalizeOpenAlex, searchScholarly } from '../src/lib/evidence/sources.js'
 import { relevance, scoreSource, scoreWebSource, WEB_CREDIBILITY_THRESHOLD } from '../src/lib/evidence/credibility.js'
 import { citationsFromResponse } from '../src/lib/evidence/web.js'
-import { PANEL, buildPack, checkCitations, computeConsensus, runDeliberation } from '../src/lib/evidence/deliberation.js'
+import { PANEL, buildPack, checkCitations, computeConsensus, gatherEvidence, runDeliberation } from '../src/lib/evidence/deliberation.js'
 
 const NOW = new Date('2026-10-03T00:00:00Z')
 const openAlexWork = (over = {}) => ({
@@ -134,7 +134,7 @@ test('runDeliberation runs plan → retrieval → web → debate → consensus w
   const searchLibrary = async (queries) => (queries.includes('remote visits') ? [librarySource] : [])
   const result = await runDeliberation({ apiKey: 'k', model: 'm', prompt: 'remote visits', fetchImpl, searchLibrary, onEvent: (e) => stages.push(e.stage), now: () => 0 })
   assert.equal(result.retrieval.irrelevantDropped, 0)
-  assert.deepEqual(stages, ['planning', 'retrieving', 'library', 'web', 'opening', 'rebuttal', 'consensus', 'done'])
+  assert.deepEqual(stages, ['planning', 'retrieving', 'opening', 'rebuttal', 'consensus', 'done'])
   assert.deepEqual(result.pack.map((s) => [s.sid, s.kind]), [['S1', 'paper'], ['S2', 'trial'], ['S3', 'document'], ['S4', 'web']])
   assert.equal(result.pack[2].location.docId, 'd', 'library passages keep their location')
   assert.deepEqual(result.library, { used: 1, error: null, enabled: true })
@@ -144,4 +144,42 @@ test('runDeliberation runs plan → retrieval → web → debate → consensus w
   assert.equal(result.citationAudit.invalidDropped, PANEL.length, 'S99 dropped from every opening')
   assert.equal(result.computed.weightedMean, 4)
   assert.equal(result.consensus.recommendation, 'proceed_with_changes')
+})
+
+test('evidence gathering runs web, scholarly and library searches concurrently', async () => {
+  const inFlight = { now: 0, max: 0 }
+  const slow = async (value) => {
+    inFlight.now++
+    inFlight.max = Math.max(inFlight.max, inFlight.now)
+    await new Promise((r) => setTimeout(r, 20))
+    inFlight.now--
+    return value
+  }
+  const chatPlan = { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ queries: ['remote visits'], metric: 'm', unit: 'u' }) } }] }) }
+  const fetchImpl = async (url, init) => {
+    if (url.endsWith('/responses')) return slow({ ok: true, json: async () => ({ output: [] }) })
+    if (url.endsWith('/chat/completions')) return chatPlan
+    return slow({ ok: true, json: async () => ({ results: [], resultList: { result: [] }, studies: [] }) })
+  }
+  const searchLibrary = () => slow([])
+  const gathered = await gatherEvidence({ apiKey: 'k', model: 'm', prompt: 'remote visits', fetchImpl, searchLibrary, now: () => 0 })
+  assert.ok(inFlight.max >= 4, `expected parallel requests, saw at most ${inFlight.max} at once`)
+  assert.deepEqual(gathered.queries, ['remote visits'])
+})
+
+test('runDeliberation reuses prefetched evidence instead of searching again', async () => {
+  let searches = 0
+  const chat = (payload) => ({ ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify(payload) } }] }) })
+  const fetchImpl = async (url, init) => {
+    if (!url.includes('openai.com')) { searches++; return { ok: true, json: async () => ({}) } }
+    const name = JSON.parse(init.body).response_format.json_schema.name
+    if (name === 'opening_position') return chat({ position: 'p', estimate: { value: 1, low: 0, high: 2 }, calculation: '', claims: [], confidence: 0.5 })
+    if (name === 'rebuttal') return chat({ responses: [], revised_position: 'r', revised_estimate: { value: 1, low: 0, high: 2 }, changed_mind: false, confidence: 0.5 })
+    return chat({ decision: 'd', recommendation: 'insufficient_evidence', estimate: { value: 1, low: 0, high: 2 }, calculation: '', key_points: [], dissent: [], evidence_gaps: [], confidence: 0.3 })
+  }
+  const evidence = Promise.resolve({ plan: { metric: 'm', unit: 'u' }, queries: ['q'], retrieval: { log: [], retractedRemoved: 0, sources: [] }, library: { sources: [], error: null }, web: { sources: [], excluded: [], tool: null, error: null }, pack: [], irrelevantDropped: 0, enabled: { library: false, web: false }, timings: { planMs: 1, gatherMs: 2 } })
+  const result = await runDeliberation({ apiKey: 'k', model: 'm', prompt: 'p', evidence, fetchImpl, now: () => 0 })
+  assert.equal(searches, 0)
+  assert.equal(result.timings.reused, true)
+  assert.equal(result.consensus.recommendation, 'insufficient_evidence')
 })
