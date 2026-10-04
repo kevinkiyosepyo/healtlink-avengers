@@ -1,13 +1,13 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  microfish on AWS: one App Runner service running the container (frontend,
+  lookahead on AWS: one App Runner service running the container (frontend,
   Google sign-in, opt-in cloud backup API) and a DynamoDB table for backups.
   Secrets live in Secrets Manager; nothing sensitive is passed as plain text.
 
 Parameters:
   ImageUri:
     Type: String
-    Description: ECR image URI, e.g. 123456789012.dkr.ecr.us-west-2.amazonaws.com/microfish:latest
+    Description: ECR image URI, e.g. 123456789012.dkr.ecr.us-west-2.amazonaws.com/lookahead:latest
   AuthUrl:
     Type: String
     Description: Public https origin of the service (the App Runner URL or a custom domain). Must match the Google OAuth callback origin.
@@ -64,7 +64,7 @@ Resources:
             Principal: { Service: tasks.apprunner.amazonaws.com }
             Action: sts:AssumeRole
       Policies:
-        - PolicyName: microfish-runtime
+        - PolicyName: lookahead-runtime
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
@@ -78,7 +78,7 @@ Resources:
   Service:
     Type: AWS::AppRunner::Service
     Properties:
-      ServiceName: microfish
+      ServiceName: lookahead
       SourceConfiguration:
         AutoDeploymentsEnabled: true
         AuthenticationConfiguration:

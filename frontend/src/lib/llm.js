@@ -1,6 +1,6 @@
 // Bring-your-own-key OpenAI client. Runs in the browser and talks to
 // api.openai.com directly, so the researcher's key and scenario never pass
-// through a microfish server. Every network call takes an injectable `fetch`
+// through a lookahead server. Every network call takes an injectable `fetch`
 // so the logic is unit-testable.
 import { AGENTS, STANCE_LEVELS, agentId } from "./agents.js";
 

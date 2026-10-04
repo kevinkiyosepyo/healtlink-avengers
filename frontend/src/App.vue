@@ -616,12 +616,12 @@ watch(
                   <div class="message-label mono">
                     <template v-if="message.role === 'user'">you</template>
                     <template v-else-if="runForMessage(message)"
-                      >microfish — run {{ runIndex(runForMessage(message)) }} —
+                      >lookahead — run {{ runIndex(runForMessage(message)) }} —
                       {{ research.records[runForMessage(message).id]?.mode === "openai"
                         ? `11 stakeholders — ${research.records[runForMessage(message).id].provenance?.model || research.records[runForMessage(message).id].provenance?.requestedModel || "openai"}`
                         : `${runForMessage(message).agentCount} agents — demo` }}</template
                     >
-                    <template v-else>microfish — demo</template>
+                    <template v-else>lookahead — demo</template>
                   </div>
                   <p
                     v-if="!(message.role === 'assistant' && research.records[message.runId]?.mode === 'openai')"

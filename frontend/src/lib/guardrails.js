@@ -13,17 +13,17 @@ export const BLOCK_REASONS = {
   too_long: `keep scenarios under ${MAX_PROMPT_LENGTH} characters.`,
   personal_info:
     "remove personal details (names with health info, contact details, ids or record numbers) — scenarios should describe groups, not individuals.",
-  secrets: "this looks like it contains credentials or asks for system details, which microfish can't help with.",
-  injection: "microfish only answers scenario questions; it can't change its instructions.",
+  secrets: "this looks like it contains credentials or asks for system details, which lookahead can't help with.",
+  injection: "lookahead only answers scenario questions; it can't change its instructions.",
   individual_care:
-    "microfish simulates community-level scenarios and can't give personal diagnosis, dosing or treatment advice. please talk to a clinician.",
+    "lookahead simulates community-level scenarios and can't give personal diagnosis, dosing or treatment advice. please talk to a clinician.",
   crisis:
     "it sounds like you or someone else may be in danger. in the US, call or text 988 (suicide & crisis lifeline) or call 911 for emergencies.",
-  off_topic: "microfish rehearses clinical-trial and healthcare scenarios only. try a protocol change, recruitment or retention question, or a site-operations scenario.",
-  unsafe: "this request falls outside what microfish can simulate safely.",
+  off_topic: "lookahead rehearses clinical-trial and healthcare scenarios only. try a protocol change, recruitment or retention question, or a site-operations scenario.",
+  unsafe: "this request falls outside what lookahead can simulate safely.",
   controversial:
-    "microfish avoids partisan, religious or culture-war framings. try asking about the practical health impact instead.",
-  confidential: "microfish can't help with confidential or identifying information.",
+    "lookahead avoids partisan, religious or culture-war framings. try asking about the practical health impact instead.",
+  confidential: "lookahead can't help with confidential or identifying information.",
   flagged: "this scenario was flagged by content moderation and wasn't sent for analysis.",
 };
 

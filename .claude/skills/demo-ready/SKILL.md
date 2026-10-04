@@ -8,7 +8,7 @@ description: Use when the user says "demo ready", "prep the demo", "judging soon
 Goal: the 3-minute demo path works every time, and there is a plan B when it doesn't.
 
 1. **Green build.** `cd frontend && npm test && npm run build`. Fix failures before anything else; report what you changed.
-2. **Golden path.** Identify the single flow judges must see (for microfish: new simulation → starter prompt → run → split view with the knowledge graph pulsing → hover/click an agent → stop). Run it in the browser (claude-in-chrome) from a clean state: clear localStorage and sessionStorage, reload, and walk it end to end. Check the console for errors. Record a GIF of the flow as a backup.
+2. **Golden path.** Identify the single flow judges must see (for lookahead: new simulation → starter prompt → run → split view with the knowledge graph pulsing → hover/click an agent → stop). Run it in the browser (claude-in-chrome) from a clean state: clear localStorage and sessionStorage, reload, and walk it end to end. Check the console for errors. Record a GIF of the flow as a backup.
 3. **Kill demo risks.** Look for: network calls that can fail on venue Wi-Fi, first-load delays, empty states that look broken, text overflow at projector resolutions (1280×720 and 1920×1080), dark-mode-only contrast issues, debug UI, `console.log` noise. Fix the cheap ones; list the rest.
 4. **Seed data.** If the demo needs pre-made content, add a seeded state the presenter can load deliberately (never silently in production paths).
 5. **Script.** Write `DEMO.md` at the repo root:

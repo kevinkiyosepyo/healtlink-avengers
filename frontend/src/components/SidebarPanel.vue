@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import StatusBadge from "./StatusBadge.vue";
+import BrandMark from "./BrandMark.vue";
 
 const props = defineProps({
   sessions: { type: Array, required: true },
@@ -40,7 +41,7 @@ const isMac =
 <template>
   <aside class="sidebar" aria-label="Simulation conversations">
     <div class="sidebar-brand">
-      <span class="brand">microfish<span class="brand-period">.</span></span>
+      <span class="brand"><BrandMark /></span>
       <button v-if="closable" class="icon-btn" aria-label="Close sidebar" @click="emit('close')">
         <X :size="16" />
       </button>

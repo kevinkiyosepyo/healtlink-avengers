@@ -140,7 +140,7 @@ function reportData() {
 }
 async function exportJson() {
   const artifact = await createArtifact("preflight-report", reportData());
-  downloadText(`microfish-preflight-${stamp()}.json`, "application/json", JSON.stringify(artifact, null, 2));
+  downloadText(`lookahead-preflight-${stamp()}.json`, "application/json", JSON.stringify(artifact, null, 2));
 }
 function exportCsv() {
   const header = ["severity", "category", "title", "summary", "recommendation", "reviewed", "source_document", "source_line", "source_quote"];
@@ -151,7 +151,7 @@ function exportCsv() {
       rows.push([f.severity, f.category, f.title, f.summary, f.recommendation, reviewed.value.has(f.id), src?.documentName, src?.line, src?.quote].map(csvCell).join(","));
     }
   }
-  downloadText(`microfish-preflight-${stamp()}.csv`, "text/csv;charset=utf-8", rows.join("\n"));
+  downloadText(`lookahead-preflight-${stamp()}.csv`, "text/csv;charset=utf-8", rows.join("\n"));
 }
 function exportMarkdown() {
   const lines = [`# Document preflight review`, ``, `_${new Date().toLocaleString()} · ${result.value.findings.length} findings · ${open.value} open_`, ``, `> ${CHECK_SCOPE}`, ``];
@@ -160,7 +160,7 @@ function exportMarkdown() {
     for (const src of f.sources) lines.push(`- ${src.documentName}, line ${src.line}: \`${src.quote.trim()}\``);
     lines.push(``);
   }
-  downloadText(`microfish-preflight-${stamp()}.md`, "text/markdown;charset=utf-8", lines.join("\n"));
+  downloadText(`lookahead-preflight-${stamp()}.md`, "text/markdown;charset=utf-8", lines.join("\n"));
 }
 
 const heading = ref(null);

@@ -1,4 +1,6 @@
-# Microfish simulation workspace
+# lookahead.
+
+**See your trial before it runs.** lookahead rehearses clinical-trial protocol changes before they reach your sites.
 
 A Vue and Vite workspace with ChatGPT-style simulation conversations. Create a new chat for each scenario, switch between chats while runs continue, and keep separate drafts and run histories. The sidebar supports search, rename, and delete. Chat, graph, and split views show the selected conversation.
 
@@ -25,7 +27,7 @@ After the stakeholder scores, five agents deliberate: a clinical trialist, a par
 1. The model plans literature queries and the metric to estimate.
 2. **Scholarly sources first:** OpenAlex, Europe PMC (including PubMed) and ClinicalTrials.gov, queried straight from your browser. Retracted papers and off-topic results are removed; the rest are ranked by a transparent credibility score (study design, peer review, citations per year, recency) and relevance.
 3. **Web search second:** OpenAI's web search, keeping only credible domains (agencies, journals, academic institutions). Excluded links are listed.
-4. Agents state positions with arithmetic and cited sources (`S1`, `S2`, …), rebut each other, and revise. A moderator writes the group decision. microfish also computes an independent confidence-weighted cross-check of the agents' estimates.
+4. Agents state positions with arithmetic and cited sources (`S1`, `S2`, …), rebut each other, and revise. A moderator writes the group decision. lookahead also computes an independent confidence-weighted cross-check of the agents' estimates.
 5. The **provenance** tab shows every query, database response, source (with link, credibility breakdown and which claims cite it) and excluded link. Invalid citations are dropped and uncited claims flagged.
 
 ## Source library (bring your own sources)
@@ -39,7 +41,7 @@ Sign in with Google, then turn on **cloud backup** in model & data to copy recor
 ## Modes
 
 - **Demo (default):** 12 illustrative agents and a local playback. No model is called and nothing leaves the browser.
-- **Your OpenAI key:** open **model & data**, paste a key and verify it, then pick a model. Each scenario is screened (local rules plus OpenAI moderation), then all 11 stakeholder groups are scored in one structured request. The key and scenario go **directly from the browser to api.openai.com**; there is no microfish server-side key, proxy or database. The key stays in memory unless you opt into "remember for this tab".
+- **Your OpenAI key:** open **model & data**, paste a key and verify it, then pick a model. Each scenario is screened (local rules plus OpenAI moderation), then all 11 stakeholder groups are scored in one structured request. The key and scenario go **directly from the browser to api.openai.com**; there is no lookahead server-side key, proxy or database. The key stays in memory unless you opt into "remember for this tab".
 
 Every run is saved as a research record in IndexedDB, with prompt, guardrail results, provenance (model, temperature, seed, prompt version, latency, tokens) and a SHA-256 fingerprint. Export a run or the whole workspace as CSV (long format) or JSON. Deleting a chat deletes its records; **delete all local data** wipes everything.
 

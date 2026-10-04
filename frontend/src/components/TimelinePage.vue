@@ -67,7 +67,7 @@ function scenario() {
   };
 }
 async function exportJson() {
-  downloadText(`microfish-timeline-${stamp()}.json`, "application/json", JSON.stringify(await createArtifact("timeline-scenario", scenario()), null, 2));
+  downloadText(`lookahead-timeline-${stamp()}.json`, "application/json", JSON.stringify(await createArtifact("timeline-scenario", scenario()), null, 2));
 }
 function exportCsv() {
   const header = ["task", "owner", "duration_days", "added_delay", "start_date", "end_date", "baseline_end_date", "slack_days", "critical", "depends_on"];
@@ -75,7 +75,7 @@ function exportCsv() {
   for (const t of timeline.value.tasks) {
     rows.push([t.title, t.owner, t.duration, t.delay, addWorkingDays(plan.value.startDate, t.start), addWorkingDays(plan.value.startDate, t.end), addWorkingDays(plan.value.startDate, t.baselineEnd), t.slack, t.critical, t.dependencies.map(titleOf).join("; ")].map(csvCell).join(","));
   }
-  downloadText(`microfish-timeline-${stamp()}.csv`, "text/csv;charset=utf-8", rows.join("\n"));
+  downloadText(`lookahead-timeline-${stamp()}.csv`, "text/csv;charset=utf-8", rows.join("\n"));
 }
 
 const heading = ref(null);
