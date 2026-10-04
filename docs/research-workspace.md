@@ -1,66 +1,37 @@
-# lookahead.
+# Research tools
 
-**See your trial before it runs.** lookahead rehearses clinical-trial protocol changes before they reach your sites.
+Research tools are an internal Workspace page at `/#/research`. Legacy research, library, and history entry links lead into the same Lookahead app. Appearance changes only the shared color palette; it does not navigate, remount the workspace, or change its storage scope.
 
-A Vue and Vite workspace with ChatGPT-style simulation conversations. Create a new chat for each scenario, switch between chats while runs continue, and keep separate drafts and run histories. The sidebar supports search, rename, and delete. Chat, graph, and split views show the selected conversation.
+## Sources
 
-## Run locally
+Import PDF, Markdown, TXT, or ZIP files through the same bounded parser used by simulation setup. The library allows 12 documents and 120,000 extracted characters in total, with a 40,000-character limit per document. Text extraction happens locally. Scanned PDFs require OCR outside the app.
 
-```sh
-npm run install:all
-npm run dev        # Vite dev server
-npm test           # frontend + backend suites
-npm start          # build, then serve everything from one Express process
-```
+Search ranks keyword matches using the existing lexical retrieval and chunking helpers. It does not download an embedding model. Results display actual extracted-text line ranges, not original PDF page numbers. Select documents to add copies to the active simulation’s setup. Running simulations must be stopped before their setup changes. Removing a library document leaves existing simulation copies and saved review excerpts intact.
 
-## What it does (Track 2: AI for clinical research)
+## Evidence
 
-- **Stakeholder rehearsal:** describe a protocol or operations change (fewer visits, e-consent, evening hours) and see how participants, sites, oversight, sponsor and data teams would likely respond, as a knowledge graph plus a stance table.
-- **Study build:** paste a protocol's schedule of activities to get a visit × assessment matrix, a draft CRF, edit checks and participant/site burden. Paste a source note to get extracted values and auto-generated queries (out of range, missing, outside visit window).
-- **Document preflight:** local checks across protocol, consent and onboarding text: mismatched study IDs or visit counts, outdated versions, open questions, each with its source line.
-- **Start-up timeline:** delay any start-up step (ethics review, contracts, EDC build…) and see whether first participant in moves.
+A signed-in researcher with a connected OpenAI or Anthropic account can request a review. Demo mode supports local source search but does not make model calls. The review sends:
 
-## Evidence deliberation (your-key mode)
+- The explicit question and active simulation’s saved setup to the selected provider.
+- Up to eight matched library passages, with at most three from each document, to the selected provider.
+- Search terms to OpenAlex, Europe PMC, and ClinicalTrials.gov through the server.
 
-After the stakeholder scores, five agents deliberate: a clinical trialist, a participant-engagement scientist, a biostatistician, a regulatory and ethics reviewer, and a site-operations lead.
+`/api/evidence` verifies the session and encrypted provider connection, validates any signed university snapshot, bounds retrieval time and response size, and makes one model request. Its output contains claims, disagreements, questions, source excerpts, and retrieval warnings. Citation IDs must exist in the retrieved source pack; otherwise they are removed and the claim is marked uncited. A citation indicates supplied material, not that the claim or study has been independently verified.
 
-1. The model plans literature queries and the metric to estimate.
-2. **Scholarly sources first:** OpenAlex, Europe PMC (including PubMed) and ClinicalTrials.gov, queried straight from your browser. Retracted papers and off-topic results are removed; the rest are ranked by a transparent credibility score (study design, peer review, citations per year, recency) and relevance.
-3. **Web search second:** OpenAI's web search, keeping only credible domains (agencies, journals, academic institutions). Excluded links are listed.
-4. Agents state positions with arithmetic and cited sources (`S1`, `S2`, …), rebut each other, and revise. A moderator writes the group decision. lookahead also computes an independent confidence-weighted cross-check of the agents' estimates.
-5. The **provenance** tab shows every query, database response, source (with link, credibility breakdown and which claims cite it) and excluded link. Invalid citations are dropped and uncited claims flagged.
+Switching accounts or simulations cancels a pending review and prevents late results from being saved to another workspace. Changing appearance keeps the review running. Stopping cancels the request, though a provider may bill work already received.
 
-## Source library (bring your own sources)
+## Review history
 
-Open **source library** and add PDFs, text, markdown or CSV files, or paste notes (site reports, survey summaries, protocol sections, policy memos). They're chunked and embedded in your browser. During each deliberation the closest passages join the evidence as `S#` sources marked "team document · not externally verified", and the provenance tab shows the document, page, line and similarity. Only matched excerpts are sent to OpenAI; the documents themselves stay on your device and aren't part of cloud backup. Scanned PDFs need OCR first.
+History contains the active workspace’s simulation runs and up to 20 saved evidence reviews. Filter to the current simulation, revisit a cited review, or export JSON/Markdown. Simulation exports identify their study setup as the current saved setup, since earlier runs may have used different source material. Provider credentials and institution verification tokens are excluded from exports.
 
-## Voice
+Sources and reviews use `${simulationStorageKey}:research-tools.v1`; the simulation storage key separates the demo and each signed-in account. These records are local browser data, not encrypted storage or cloud backup. Conflicting edits from another tab block saving and show a reload notice. Legacy Lookahead records are left in their original stores; automatic migration would risk assigning shared browser data to the wrong account. Use **Export earlier workspace data** in Review history to download a filtered JSON archive of old source documents and evidence records. This explicit read-only export excludes provider settings, credentials, and embedding vectors. It does not assign old browser data to the signed-in account.
 
-Press the mic in the composer (or ⌘⇧Space) and keep talking: lookahead transcribes each phrase as you pause, removes fillers, understands "comma", "new line" and "scratch that", and submits when you say "run it". On the consensus, **listen** reads the group decision aloud. With your OpenAI key, audio goes only to OpenAI for transcription; without one, the browser's speech service is used.
+## Implementation
 
-## Cloud (optional)
+- `components/ResearchTools.vue`: source, evidence, and history UI.
+- `composables/useResearchTools.js`: account-scoped persistence and conflicting-tab protection.
+- `lib/researchTools.js`: document validation, keyword retrieval, citations, and exports.
+- `server/evidence.js` and `server/handlers.js`: bounded scholarly retrieval and authenticated model review.
+- `composables/useWorkspaceTheme.js`, `workspace-theme.css`, and `public/theme-init.js`: shared appearance and first-paint theme restoration.
 
-Sign in with Google, then turn on **cloud backup** in model & data to copy records and chats to encrypted DynamoDB storage under your account. Restore on another device or delete the cloud copy at any time. Deploying: see [AWS setup](../infra/aws/README.md) (one container on App Runner, built from the `Dockerfile`).
-
-## Modes
-
-- **Demo (default):** 12 illustrative agents and a local playback. No model is called and nothing leaves the browser.
-- **Your OpenAI key:** open **model & data**, paste a key and verify it, then pick a model. Each scenario is screened (local rules plus OpenAI moderation), then all 11 stakeholder groups are scored in one structured request. The key and scenario go **directly from the browser to api.openai.com**; this workspace calls OpenAI directly. The Microfish workspace uses a separate authenticated server integration. The key stays in memory unless you opt into "remember for this tab".
-
-Every run is saved as a research record in IndexedDB, with prompt, guardrail results, provenance (model, temperature, seed, prompt version, latency, tokens) and a SHA-256 fingerprint. Export a run or the whole workspace as CSV (long format) or JSON. Deleting a chat deletes its records; **delete all local data** wipes everything.
-
-## Current behavior
-
-Runs are explicitly labeled local demos: each lasts about 24 seconds and illustrates 12 sample agents. Multiple chats can run concurrently; each chat allows one active run. Stop affects only that chat. Follow-up questions start additional runs in the same conversation. The graph is an illustrative topology, not an AI-generated result.
-
-Conversations, drafts, and active selection are saved in this browser's local storage. Reloading restores demo progress from elapsed time, including demos whose duration has already elapsed. This is local playback recovery; no server work runs while the browser is closed. Limits are 40 chats per browser and 30 runs per chat, with visible notices when capacity or browser storage is unavailable. If another tab changes saved chats, this tab pauses saving and shows a reload notice to prevent overwriting those changes; copy any unsaved text before reloading.
-
-## Verification
-
-```sh
-cd frontend
-npm test
-npm run build
-```
-
-The deterministic controller tests cover concurrent runs, isolation, stop/delete behavior, history and draft persistence, reload recovery, and storage failures.
+The old standalone research app, browser-held key flow, study builder, automatic multi-agent debate, semantic model download, cloud backup, and theatrical boot/easter-egg UI are not mounted. The current app has only the short, dismissible Lookahead brand introduction. Some standalone utilities remain in the repository for their existing tests and shared helper implementations.

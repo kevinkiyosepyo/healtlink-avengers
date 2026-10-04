@@ -12,3 +12,13 @@ dist/
 # Private conversation and personal onboarding source material.
 /HealthLink-Hackathon-Second-Opinion-Dossier.md
 /Trial-Researcher-Personalized-Concept.md
+
+# Machine-local research data and generated Python/runtime files.
+.venv/
+/.venv
+/data/raw
+/vendor
+/web/node_modules
+__pycache__/
+*.pyc
+/server/*.db

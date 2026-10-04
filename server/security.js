@@ -5,6 +5,8 @@ export const SESSION_SECONDS = 8 * 60 * 60;
 export const BODY_LIMIT = 16 * 1024;
 export const SIMULATION_BODY_LIMIT = 640 * 1024;
 export const API_KEY_PATTERN = /^sk-[A-Za-z0-9_-]{20,500}$/;
+export const ANTHROPIC_API_KEY_PATTERN = /^sk-ant-[A-Za-z0-9_-]{20,500}$/;
+export const ANTHROPIC_WORKSPACE_PATTERN = /^wrkspc_[A-Za-z0-9]{16,80}$/;
 
 export class HttpError extends Error {
   constructor(status, code, message) {
@@ -31,6 +33,7 @@ export function settings(env = process.env) {
     googleSecret: env.AUTH_GOOGLE_SECRET,
     secure: origin.startsWith("https:"),
     model: /^[a-zA-Z0-9._:-]{1,100}$/.test(env.OPENAI_MODEL || "") ? env.OPENAI_MODEL : "gpt-4.1-mini",
+    anthropicModel: /^[a-zA-Z0-9._:-]{1,100}$/.test(env.ANTHROPIC_MODEL || "") ? env.ANTHROPIC_MODEL : "claude-haiku-4-5-20251001",
   };
 }
 
@@ -51,12 +54,12 @@ export function requireSameOrigin(request, config) {
   }
 }
 
-export async function readJson(request) {
+export async function readJson(request, limit = BODY_LIMIT) {
   if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
     throw new HttpError(415, "invalid_content_type", "Send a JSON request.");
   }
   const length = Number(request.headers.get("content-length"));
-  if (length > BODY_LIMIT) throw new HttpError(413, "request_too_large", "The request is too large.");
+  if (length > limit) throw new HttpError(413, "request_too_large", "The request is too large.");
   let size = 0;
   const chunks = [];
   if (request.body) {
@@ -65,7 +68,7 @@ export async function readJson(request) {
       const { value, done } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > BODY_LIMIT) {
+      if (size > limit) {
         await reader.cancel();
         throw new HttpError(413, "request_too_large", "The request is too large.");
       }
@@ -80,11 +83,19 @@ export async function readJson(request) {
 }
 
 export function keyCookieName(config) {
-  return `${config.secure ? "__Host-" : ""}microfish.openai`;
+  return providerCookieName(config, "openai");
 }
 
-function encryptionKey(config) {
-  return new Uint8Array(hkdfSync("sha256", config.secret, config.origin, "microfish.openai-connection.v1", 32));
+export function anthropicKeyCookieName(config) {
+  return providerCookieName(config, "anthropic");
+}
+
+function providerCookieName(config, provider) {
+  return `${config.secure ? "__Host-" : ""}microfish.${provider}`;
+}
+
+function encryptionKey(config, provider) {
+  return new Uint8Array(hkdfSync("sha256", config.secret, config.origin, `microfish.${provider}-connection.v1`, 32));
 }
 
 export function cookieValue(request, name) {
@@ -96,37 +107,70 @@ export function cookieValue(request, name) {
 }
 
 export async function sealApiKey(apiKey, session, config, now = Date.now()) {
+  return sealProviderApiKey(apiKey, session, config, "openai", now);
+}
+
+export async function sealAnthropicApiKey(apiKey, session, config, now = Date.now()) {
+  return sealProviderApiKey(apiKey, session, config, "anthropic", now);
+}
+
+export async function sealAnthropicConnection({ apiKey, workspaceId = null }, session, config, now = Date.now()) {
+  return sealProviderApiKey(apiKey, session, config, "anthropic", now, workspaceId);
+}
+
+async function sealProviderApiKey(apiKey, session, config, provider, now, workspaceId = null) {
   const issued = Math.floor(now / 1000);
-  return new EncryptJWT({ apiKey, sid: session.sid })
+  return new EncryptJWT({ apiKey, sid: session.sid, ...(workspaceId ? { workspaceId } : {}) })
     .setProtectedHeader({ alg: "dir", enc: "A256GCM" })
     .setSubject(session.id)
     .setIssuer(config.origin)
-    .setAudience("microfish.openai")
+    .setAudience(`microfish.${provider}`)
     .setIssuedAt(issued)
     .setExpirationTime(Math.min(issued + SESSION_SECONDS, session.expiresAt))
     .setJti(randomUUID())
-    .encrypt(encryptionKey(config));
+    .encrypt(encryptionKey(config, provider));
 }
 
 export async function readApiKey(request, session, config, now = Date.now()) {
-  const sealed = cookieValue(request, keyCookieName(config));
+  return (await readProviderConnection(request, session, config, "openai", API_KEY_PATTERN, now))?.apiKey || null;
+}
+
+export async function readAnthropicApiKey(request, session, config, now = Date.now()) {
+  return (await readAnthropicConnection(request, session, config, now))?.apiKey || null;
+}
+
+export async function readAnthropicConnection(request, session, config, now = Date.now()) {
+  return readProviderConnection(request, session, config, "anthropic", ANTHROPIC_API_KEY_PATTERN, now);
+}
+
+async function readProviderConnection(request, session, config, provider, pattern, now) {
+  const sealed = cookieValue(request, providerCookieName(config, provider));
   if (!sealed || !session) return null;
   try {
-    const { payload } = await jwtDecrypt(sealed, encryptionKey(config), {
+    const { payload } = await jwtDecrypt(sealed, encryptionKey(config, provider), {
       issuer: config.origin,
-      audience: "microfish.openai",
+      audience: `microfish.${provider}`,
       subject: session.id,
       currentDate: new Date(now),
       keyManagementAlgorithms: ["dir"],
       contentEncryptionAlgorithms: ["A256GCM"],
     });
-    if (payload.sid !== session.sid || !API_KEY_PATTERN.test(payload.apiKey || "") || session.expiresAt <= now / 1000) return null;
-    return payload.apiKey;
+    if (payload.sid !== session.sid || !pattern.test(payload.apiKey || "") || session.expiresAt <= now / 1000) return null;
+    if (payload.workspaceId != null && (provider !== "anthropic" || typeof payload.workspaceId !== "string" || !ANTHROPIC_WORKSPACE_PATTERN.test(payload.workspaceId))) return null;
+    return { apiKey: payload.apiKey, ...(provider === "anthropic" ? { workspaceId: payload.workspaceId || null } : {}) };
   } catch { return null; }
 }
 
 export function keyCookie(value, config, maxAge = SESSION_SECONDS) {
-  return `${keyCookieName(config)}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.max(0, Math.floor(maxAge))}${config.secure ? "; Secure" : ""}`;
+  return providerKeyCookie(value, config, "openai", maxAge);
+}
+
+export function anthropicKeyCookie(value, config, maxAge = SESSION_SECONDS) {
+  return providerKeyCookie(value, config, "anthropic", maxAge);
+}
+
+function providerKeyCookie(value, config, provider, maxAge) {
+  return `${providerCookieName(config, provider)}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.max(0, Math.floor(maxAge))}${config.secure ? "; Secure" : ""}`;
 }
 
 function institutionSigningKey(config) {

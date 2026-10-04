@@ -1,16 +1,17 @@
 <script setup>
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import AppIcon from './AppIcon.vue';
-import { analyzePacket, createSamplePacket, inferDocumentVersion, PREFLIGHT_CATEGORIES, CHECK_SCOPE } from '../lib/documentPreflight.js';
+import { analyzePacket, createSamplePacket, PREFLIGHT_CATEGORIES, CHECK_SCOPE } from '../lib/documentPreflight.js';
+import { importPreflightFiles, PREFLIGHT_IMPORT_ACCEPT, PREFLIGHT_LIMITS } from '../lib/preflightImports.js';
 
 const props = defineProps({
   storageKey: { type: String, default: 'microfish.document-preflight.v1' },
   sampleDefault: { type: Boolean, default: true },
 });
 const STORAGE_KEY = props.storageKey;
-const MAX_DOCUMENTS = 12;
-const MAX_TEXT = 100000;
-const MAX_PACKET = 500000;
+const MAX_DOCUMENTS = PREFLIGHT_LIMITS.documents;
+const MAX_TEXT = PREFLIGHT_LIMITS.documentChars;
+const MAX_PACKET = PREFLIGHT_LIMITS.packetChars;
 const kinds = { protocol: 'Protocol', consent: 'Consent', onboarding: 'Onboarding', training: 'Training record', other: 'Other document' };
 const categoryIcons = { missing: 'document', conflict: 'branch', outdated: 'clock', question: 'question' };
 const categoryLabels = { missing: 'Missing items', conflict: 'Conflicting instructions', outdated: 'Outdated versions', question: 'Unanswered questions' };
@@ -178,44 +179,28 @@ function removeDocument(id) {
   invalidate();
   notice.value = 'Document removed from the packet.';
 }
-function inferKind(name) {
-  if (/protocol/i.test(name)) return 'protocol';
-  if (/consent/i.test(name)) return 'consent';
-  if (/onboard|checklist/i.test(name)) return 'onboarding';
-  if (/training|certificate/i.test(name)) return 'training';
-  return 'other';
-}
 async function importFiles(files) {
   if (!files?.length || importing.value || running.value) return;
   importing.value = true;
-  const added = [];
-  const errors = [];
   const startingOwnPacket = isExample.value;
   const baseDocuments = startingOwnPacket ? [] : documents.value;
-  let total = baseDocuments.reduce((sum, document) => sum + document.text.length, 0);
-  for (const file of Array.from(files)) {
-    if (!/\.(txt|md|markdown)$/i.test(file.name)) { errors.push(`${file.name}: use a .txt or Markdown file, or paste its text.`); continue; }
-    if (baseDocuments.length + added.length >= MAX_DOCUMENTS) { errors.push(`The packet limit is ${MAX_DOCUMENTS} documents.`); break; }
-    if (file.size > 1024 * 1024) { errors.push(`${file.name}: file is too large.`); continue; }
-    try {
-      const text = await file.text();
-      if (!text.trim() || text.includes('\u0000')) { errors.push(`${file.name}: no readable text found.`); continue; }
-      if (text.length > MAX_TEXT || total + text.length > MAX_PACKET) { errors.push(`${file.name}: exceeds the document or packet text limit.`); continue; }
-      total += text.length;
-      const version = inferDocumentVersion(text);
-      added.push({ id: newId(), name: file.name, kind: inferKind(file.name), version, text });
-    } catch { errors.push(`${file.name}: could not read this file.`); }
+  try {
+    const { added, errors } = await importPreflightFiles(files, { existingDocuments: baseDocuments, id: newId });
+    if (disposed) return;
+    if (added.length) {
+      backup();
+      if (startingOwnPacket) documents.value = [];
+      documents.value.push(...added);
+      isExample.value = false;
+      invalidate();
+    }
+    notice.value = [added.length ? `${added.length} document${added.length === 1 ? '' : 's'} added.${startingOwnPacket ? ' Example documents set aside.' : ''} Check each document’s type and version, then run preflight.` : '', ...errors].filter(Boolean).join(' ');
+  } catch {
+    notice.value = 'The files could not be imported. Your current packet has been kept. Try again or upload the Markdown files individually.';
+  } finally {
+    importing.value = false;
+    if (fileInput.value) fileInput.value.value = '';
   }
-  if (added.length) {
-    backup();
-    if (startingOwnPacket) documents.value = [];
-    documents.value.push(...added);
-    isExample.value = false;
-    invalidate();
-  }
-  notice.value = [added.length ? `${added.length} document${added.length === 1 ? '' : 's'} added.${startingOwnPacket ? ' Example documents set aside.' : ''} Check each document’s type and version, then run preflight.` : '', ...errors].filter(Boolean).join(' ');
-  importing.value = false;
-  if (fileInput.value) fileInput.value.value = '';
 }
 async function loadExample() {
   backup();
@@ -284,11 +269,11 @@ onUnmounted(() => { disposed = true; cancelAnimationFrame(pendingFrame); });
         <section class="pf-packet-panel" aria-labelledby="packet-heading">
           <div class="pf-panel-heading"><h2 id="packet-heading">Your packet</h2><span class="pf-count">{{ documents.length }}</span></div>
           <p class="pf-panel-description">{{ isExample ? 'Explore this example, or add your own files to start a fresh packet.' : 'Keep the documents for one study together.' }}</p>
-          <input ref="fileInput" class="sr-only" type="file" accept=".txt,.md,.markdown,text/plain,text/markdown" multiple tabindex="-1" aria-label="Upload packet documents" @change="importFiles($event.target.files)" />
-          <button class="pf-upload" :disabled="importing || running" @click="fileInput.click()" @dragover.prevent @drop.prevent="importFiles($event.dataTransfer.files)">
+          <input ref="fileInput" class="sr-only" type="file" :accept="PREFLIGHT_IMPORT_ACCEPT" multiple tabindex="-1" aria-label="Upload packet documents" @change="importFiles($event.target.files)" />
+          <button type="button" class="pf-upload" :disabled="importing || running" @click="fileInput?.click()" @dragover.prevent @drop.prevent="importFiles($event.dataTransfer.files)">
             <span class="pf-upload-icon"><AppIcon name="upload" :size="21" /></span>
             <strong>{{ importing ? 'Reading documents…' : 'Add documents' }}</strong>
-            <span>Drop files here or browse</span><small>Text & Markdown · up to 12 files</small>
+            <span>Drop files here or browse</span><small>Text, Markdown & ZIP · up to 12 documents</small>
           </button>
           <button class="pf-paste-button" :disabled="importing || running" @click="editDocument()"><AppIcon name="plus" :size="15" /> Paste document text</button>
           <div class="pf-document-list">

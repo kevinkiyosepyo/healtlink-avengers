@@ -1,12 +1,13 @@
-/* Shared white-and-blue palette across the research workspace. */
+/* Default light appearance; workspace-theme.css supplies the dark palette. */
 :root {
   --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, sans-serif;
+  --font-brand: "Geist Variable", var(--font-body);
   --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
   --font-data: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-family: var(--font-body);
   color: var(--ui-text);
   background: var(--ui-canvas);
-  color-scheme: only light;
+  color-scheme: light;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -114,20 +115,12 @@ p {
   gap: 9px;
   padding: 0 8px 32px;
 }
-.brand-symbol {
-  display: grid;
-  place-items: center;
-  color: var(--ui-accent);
-}
 .brand {
   color: var(--ui-text);
-  font-family: var(--font-display);
+  font-family: var(--font-brand);
   font-size: 1.875rem;
-  letter-spacing: -1.2px;
+  letter-spacing: -0.02em;
   font-weight: 500;
-}
-.brand-period {
-  color: var(--ui-muted);
 }
 .new-chat-button {
   display: flex;
@@ -1377,7 +1370,6 @@ p {
 .workspace-nav-button { border-radius: 4px; }
 .conversation-status, .sidebar-section-label, .run-percentage { font-family: var(--font-data); }
 .search-box { border-radius: 4px; background: var(--ui-surface); }
-.brand-period { color: var(--ui-accent); }
 @media (max-width: 760px) {
   .starter-card .starter-number { top: 19px; }
   .workspace-heading { font-size: .875rem; }
@@ -1391,4 +1383,10 @@ p {
 .simulation-context-bar span { display: block; margin-top: 3px; color: var(--ui-muted, #5d616b); font-size: .75rem; line-height: 1.5; }
 .simulation-context-bar button { min-height: 40px; font-size: .78rem; }
 
-.workspace-link { text-decoration: none; }
+
+/* The account remains available in the sidebar on narrow screens. */
+@media (max-width: 760px) {
+  .topbar .account-status { display: none; }
+  .topbar .workspace-breadcrumb { flex: 1; }
+  .topbar .current-title { max-width: none; }
+}

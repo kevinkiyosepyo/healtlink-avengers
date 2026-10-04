@@ -1,44 +1,34 @@
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import AppIcon from "./components/AppIcon.vue";
+import LookaheadLogo from "./components/LookaheadLogo.vue";
+import LookaheadIntro from "./components/LookaheadIntro.vue";
 import SimulationGraph from "./components/SimulationGraph.vue";
 import BottleneckTimeline from "./components/BottleneckTimeline.vue";
 import DocumentPreflight from "./components/DocumentPreflight.vue";
 import ResearcherLogin from "./components/ResearcherLogin.vue";
 import SampleCaseGraph from "./components/SampleCaseGraph.vue";
 import NewSimulationDialog from "./components/NewSimulationDialog.vue";
+import WorkspaceModeToggle from "./components/WorkspaceModeToggle.vue";
+import StatusIcon from "./components/StatusIcon.vue";
+import UniversityIRBPanel from "./components/UniversityIRBPanel.vue";
+import UniversitySimulationPreview from "./components/UniversitySimulationPreview.vue";
 import { useResearcherAccount } from "./composables/useResearcherAccount.js";
-<<<<<<< Updated upstream
 import { useResearcherProfile } from "./composables/useResearcherProfile.js";
+import { useInstitutionProfile } from "./composables/useInstitutionProfile.js";
+import { institutionSnapshotMatches, prepareInstitutionSimulationContext } from "./lib/institutionProfile.js";
 import { useSimulationWorkspace } from "./composables/useSimulationWorkspace.js";
 import { PROMPT_LIMIT, TITLE_LIMIT, STORAGE_KEY } from "./lib/simulationWorkspace.js";
 import { workspaceStorageKey } from "./lib/workspaceStorage.js";
-=======
-import { useVoice } from "./composables/useVoice.js";
-import { appendSegment, cleanTranscript } from "./lib/voice.js";
-import { PROMPT_LIMIT, TITLE_LIMIT } from "./lib/simulationWorkspace.js";
+import { canonicalWorkspaceHash, workspacePage } from "./lib/workspaceNavigation.js";
+import { normalizeSimulationContext } from "./lib/simulationContext.js";
 
-// Views load on demand; if a chunk can't be fetched (e.g. a stale tab after a
-// deploy) show a retry instead of an empty pane.
-const LoadError = () =>
-  h("p", { class: "load-error mono" }, ["this view failed to load — ", h("button", { class: "glyph-link", onClick: () => window.location.reload() }, "reload")]);
-const Nothing = () => null;
-const lazy = (loader, errorComponent = LoadError) => defineAsyncComponent({ loader, errorComponent, timeout: 20_000 });
-const SimulationGraph = lazy(() => import("./components/SimulationGraph.vue"));
-// Welcome effects (motion-v) and settings load on demand to keep first paint light.
-const BlurReveal = lazy(() => import("./components/ui/blur-reveal/BlurReveal.vue"));
-const FlickeringGrid = lazy(() => import("./components/ui/flickering-grid/FlickeringGrid.vue"), Nothing);
-const SettingsDialog = lazy(() => import("./components/SettingsDialog.vue"));
-const settingsMounted = ref(false);
-const JumpScare = lazy(() => import("./components/fx/JumpScare.vue"), Nothing);
-const LibraryPage = lazy(() => import("./components/LibraryPage.vue"));
-const StudyBuildPage = lazy(() => import("./components/StudyBuildPage.vue"));
-const PreflightPage = lazy(() => import("./components/PreflightPage.vue"));
-const TimelinePage = lazy(() => import("./components/TimelinePage.vue"));
->>>>>>> Stashed changes
+const ResearchTools = defineAsyncComponent(() => import('./components/ResearchTools.vue'));
 
-const { account, busy: accountBusy, error: accountError, ready: providerReady, google, connect, disconnect, signout } = useResearcherAccount();
+const { account, busy: accountBusy, error: accountError, ready: providerReady, openaiReady, anthropicReady, google, connect, disconnect, connectAnthropic, disconnectAnthropic, signout } = useResearcherAccount();
 const { university, universityError, saveUniversity } = useResearcherProfile(account);
+const { profile: universityProfile, token: universityToken, state: institutionState, error: institutionError, provider: institutionProvider, refresh: refreshInstitution } = useInstitutionProfile(account, university);
+const institutionSnapshot = computed(() => ({ university: university.value, profile: universityProfile.value, token: universityToken.value, state: institutionState.value, error: institutionError.value, provider: institutionProvider.value }));
 let savedWorkspaceKind = "demo";
 try { if (sessionStorage.getItem("microfish.workspace-choice.v1") === "personal") savedWorkspaceKind = "personal"; } catch { /* Navigation also works without browser storage. */ }
 const workspaceKind = ref(savedWorkspaceKind);
@@ -66,9 +56,14 @@ const {
   deleteSession,
   startRun,
   startOpenAIRun,
+  startAnthropicRun,
   stopRun,
 } = useSimulationWorkspace({ storageKey: simulationStorageKey });
 const runMode = ref("demo");
+const selectedProviderReady = computed(() => runMode.value === "openai" ? openaiReady.value : runMode.value === "anthropic" ? anthropicReady.value : false);
+const connectionLabel = computed(() => openaiReady.value && anthropicReady.value ? "OpenAI + Anthropic connected" : openaiReady.value ? "OpenAI connected" : anthropicReady.value ? "Anthropic connected" : "Connect AI");
+const providerName = mode => mode === "anthropic" ? "Anthropic" : mode === "openai" ? "OpenAI" : "Demo";
+const isAIRun = run => run?.mode === "openai" || run?.mode === "anthropic";
 const loginPage = ref(null);
 function enterWorkspace(mode) {
   if (!account.user || !university.value) return;
@@ -81,23 +76,28 @@ function enterDemo() {
   runMode.value = "demo";
   navigate("case");
 }
-watch(providerReady, (ready) => {
-  if (ready && workspaceKind.value === "personal") runMode.value = "openai";
-  else {
-    for (const session of sessions.value) {
-      if (session.runs.some(run => run.mode === "openai" && run.status === "running")) stopRun(session.id);
-    }
+watch([openaiReady, anthropicReady], ([openai, anthropic]) => {
+  if (workspaceKind.value === "personal" && !selectedProviderReady.value) {
+    runMode.value = openai ? "openai" : anthropic ? "anthropic" : "demo";
+  }
+  for (const session of sessions.value) {
+    if (session.runs.some(run => run.status === "running" && ((run.mode === "openai" && !openai) || (run.mode === "anthropic" && !anthropic)))) stopRun(session.id);
   }
 });
 const activeView = ref("Split");
 function pageFromHash() {
-  const hash = window.location.hash.split("?")[0];
-  return ({ "#/case": "case", "#/timeline": "timeline", "#/preflight": "preflight", "#/login": "login", "#/simulations": "simulations" })[hash] || "login";
+  const hash = canonicalWorkspaceHash(window.location.hash);
+  if (hash !== window.location.hash) window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}${hash}`);
+  return workspacePage(hash);
 }
 const currentPage = ref(pageFromHash());
+const researchVisited = ref(currentPage.value === 'research');
+const researchPage = ref(null);
+const researchToolsNotice = ref('');
 const timelinePage = ref(null);
 const preflightPage = ref(null);
 const casePage = ref(null);
+const universityPage = ref(null);
 watch(() => [account.loading, account.user?.id || account.user?.email], ([loading, id], [, previousId]) => {
   if (loading || workspaceKind.value !== "personal") return;
   if (!id) {
@@ -112,7 +112,7 @@ function syncPage() {
   menuId.value = null;
 }
 function navigate(page) {
-  window.location.hash = ({ case: "/case", timeline: "/timeline", preflight: "/preflight", login: "/login" })[page] || "/simulations";
+  window.location.hash = ({ case: "/case", university: "/university", timeline: "/timeline", preflight: "/preflight", login: "/login", research: "/research" })[page] || "/simulations";
   currentPage.value = page;
   sidebarOpen.value = false;
   menuId.value = null;
@@ -120,11 +120,14 @@ function navigate(page) {
 onMounted(() => window.addEventListener("hashchange", syncPage));
 onUnmounted(() => window.removeEventListener("hashchange", syncPage));
 watch(currentPage, async (page) => {
+  if (page === 'research') researchVisited.value = true;
   await nextTick();
   if (page === "timeline") timelinePage.value?.focusHeading();
   else if (page === "preflight") preflightPage.value?.focusHeading();
   else if (page === "login") loginPage.value?.focusHeading();
   else if (page === "case") casePage.value?.focusHeading();
+  else if (page === 'research') researchPage.value?.focusHeading();
+  else if (page === "university") universityPage.value?.focusHeading();
   else composer.value?.focus();
 });
 const search = ref("");
@@ -191,7 +194,12 @@ const setupOpen = ref(false);
 const editingSessionId = ref(null);
 const setupError = ref("");
 const setupSession = computed(() => sessions.value.find(session => session.id === editingSessionId.value));
-watch([storageIdentity, workspaceKind], () => { setupOpen.value = false; editingSessionId.value = null; });
+const preparingInstitution = ref(false);
+let preparingAbort;
+watch([storageIdentity, workspaceKind], () => { preparingAbort?.abort(); preparingInstitution.value = false; });
+onUnmounted(() => preparingAbort?.abort());
+watch([storageIdentity, workspaceKind], () => { setupOpen.value = false; editingSessionId.value = null; researchToolsNotice.value = ''; });
+watch(activeId, () => { researchToolsNotice.value = ''; });
 watch(currentPage, page => { if (page === 'login') setupOpen.value = false; });
 watch(
   () => [account.loading, account.user, workspaceKind.value, university.value, currentPage.value],
@@ -238,11 +246,15 @@ const filteredSessions = computed(() =>
     ),
 );
 const latestRun = computed(() => activeSession.value?.runs.at(-1) ?? null);
+const simulationUniversity = computed(() => activeSession.value?.context?.university || university.value);
+const sharedInstitutionMatches = computed(() => institutionSnapshotMatches(universityProfile.value, simulationUniversity.value));
+const sharedInstitutionUniversityMatches = computed(() => institutionSnapshotMatches({ university: university.value }, simulationUniversity.value));
+const simulationInstitution = computed(() => activeSession.value?.context?.institution || (sharedInstitutionMatches.value ? universityProfile.value : null));
+const simulationInstitutionState = computed(() => activeSession.value?.context?.institution ? 'ready' : sharedInstitutionUniversityMatches.value ? institutionState.value : 'idle');
 const isRunning = computed(() => latestRun.value?.status === "running");
 const canSubmit = computed(
-  () => Boolean(activeSession.value?.draft.trim()) && !isRunning.value,
+  () => Boolean(activeSession.value?.draft.trim()) && !isRunning.value && !preparingInstitution.value,
 );
-<<<<<<< Updated upstream
 function sessionStatus(session) {
   return session.runs.at(-1)?.status ?? "draft";
 }
@@ -256,20 +268,6 @@ function statusLabel(status) {
       draft: "Draft",
     }[status] || "Draft"
   );
-=======
-const research = useResearch(sessions);
-const account = useResearcherAccount();
-
-// Voice dictation: talk continuously; segments are cleaned and appended to the
-// draft, and saying "run it" submits (hands-free, e.g. on the go).
-const voice = useVoice({ getApiKey: () => (research.settings.mode === "openai" && research.keyStatus.value === "valid" ? research.apiKey.value.trim() : "") });
-function onVoiceSegment(raw) {
-  const session = activeSession.value;
-  if (!session) return;
-  const { text, command } = cleanTranscript(raw);
-  session.draft = appendSegment(session.draft, text);
-  if (command === "send") nextTick(submitRun);
->>>>>>> Stashed changes
 }
 function runForMessage(message) {
   return activeSession.value?.runs.find((run) => run.id === message.runId);
@@ -289,12 +287,36 @@ async function newChat() {
   setupOpen.value = true;
 }
 function editSetup() {
-  if (isRunning.value) return;
+  if (isRunning.value || preparingInstitution.value) return;
   editingSessionId.value = activeId.value;
   setupError.value = "";
   setupOpen.value = true;
 }
+function reviewResearchSetup(id) {
+  if (id) selectSession(id);
+  editSetup();
+}
+function attachResearchDocuments(documents) {
+  researchToolsNotice.value = '';
+  const session = activeSession.value;
+  if (!session) return;
+  if (preparingInstitution.value || session.runs.some(run => run.status === 'running')) {
+    researchToolsNotice.value = 'Wait for the university source check or stop the current run before adding sources to its setup.';
+    return;
+  }
+  try {
+    const existing = session.context || { overview: '', transcript: '', documents: [], university: workspaceKind.value === 'personal' ? university.value : null };
+    const merged = new Map(existing.documents.map(document => [document.id, document]));
+    for (const document of documents) merged.set(document.id, document);
+    const context = normalizeSimulationContext({ ...existing, documents: [...merged.values()] });
+    if (!setSessionContext(session.id, context)) throw new Error(storageWarning.value || 'The sources could not be added.');
+    researchToolsNotice.value = `${documents.length} ${documents.length === 1 ? 'source added' : 'sources added'} to ${session.title}.`;
+  } catch (error) {
+    researchToolsNotice.value = error.message;
+  }
+}
 async function saveSetup({ title, question, context }) {
+  if (preparingInstitution.value) { setupError.value = 'Wait for the university source check to finish before changing this study setup.'; return; }
   if (editingSessionId.value) {
     if (!setSessionContext(editingSessionId.value, context)) {
       setupError.value = storageWarning.value || 'Stop the current run before changing its setup.';
@@ -322,13 +344,38 @@ async function useStarter(prompt) {
   await nextTick();
   composer.value?.focus();
 }
-function submitRun() {
+async function submitRun() {
   if (!canSubmit.value) return;
-  if (runMode.value === "openai" && (workspaceKind.value !== "personal" || !providerReady.value)) {
+  if (runMode.value !== "demo" && (workspaceKind.value !== "personal" || !selectedProviderReady.value)) {
     navigate("login");
     return;
   }
-  const run = (runMode.value === "openai" ? startOpenAIRun : startRun)(activeId.value, activeSession.value.draft);
+  const session = activeSession.value;
+  const mode = runMode.value;
+  const prompt = session.draft;
+  const identity = storageIdentity.value;
+  if (mode !== 'demo') {
+    const controller = new AbortController();
+    preparingAbort = controller;
+    preparingInstitution.value = true;
+    submitError.value = '';
+    try {
+      const context = await prepareInstitutionSimulationContext(session.context, university.value, {
+        snapshot: institutionSnapshot.value, provider: mode,
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(150000)]),
+      });
+      if (controller.signal.aborted || identity !== storageIdentity.value || !sessions.value.includes(session)) return;
+      if (!setSessionContext(session.id, context)) throw new Error('The simulation setup could not be saved. Please try again.');
+    } catch (error) {
+      if (!controller.signal.aborted) submitError.value = error.message || 'University sources could not be checked. Please try again.';
+      return;
+    } finally {
+      if (preparingAbort === controller) { preparingInstitution.value = false; preparingAbort = null; }
+    }
+  }
+  const nextDraft = session.draft !== prompt ? session.draft : null;
+  const run = (mode === "anthropic" ? startAnthropicRun : mode === "openai" ? startOpenAIRun : startRun)(session.id, prompt);
+  if (run && nextDraft !== null) session.draft = nextDraft;
   submitError.value = run
     ? ""
     : "This run could not start. Check the workspace notice and try again.";
@@ -388,6 +435,7 @@ watch(
 </script>
 
 <template>
+  <LookaheadIntro />
   <ResearcherLogin
     v-if="currentPage === 'login' || (workspaceKind === 'personal' && (account.loading || !university))"
     ref="loginPage"
@@ -396,13 +444,17 @@ watch(
     :error="accountError"
     :university="university"
     :university-error="universityError"
+    :institution-snapshot="institutionSnapshot"
     @save-university="saveUniversity"
     @google="google"
     @connect="connect"
     @disconnect="disconnect"
+    @connect-anthropic="connectAnthropic"
+    @disconnect-anthropic="disconnectAnthropic"
     @signout="signout"
     @continue="enterWorkspace($event)"
     @demo="enterDemo"
+    @refresh-institution="refreshInstitution"
   />
   <div
     v-else
@@ -430,9 +482,8 @@ watch(
       @keydown.tab="trapSidebarFocus"
     >
       <div class="sidebar-brand">
-        <span class="brand-symbol"><AppIcon name="fish" :size="28" /></span
-        ><span class="brand">microfish<span class="brand-period">.</span></span
-        ><button
+        <LookaheadLogo class="brand" />
+        <button
           class="icon-button mobile-close"
           aria-label="Close sidebar"
           @click="sidebarOpen = false"
@@ -477,11 +528,21 @@ watch(
           <span>Document preflight</span>
           <AppIcon class="workspace-nav-arrow" name="arrow-up-right" :size="15" />
         </button>
-        <a class="workspace-nav-button workspace-link" href="/research.html">
+        <button
+          class="workspace-nav-button"
+          :class="{ active: currentPage === 'university' }"
+          :aria-current="currentPage === 'university' ? 'page' : undefined"
+          @click="navigate('university')"
+        >
+          <AppIcon name="people" :size="18" />
+          <span>University IRB preview</span>
+          <AppIcon class="workspace-nav-arrow" name="arrow-up-right" :size="15" />
+        </button>
+        <button class="workspace-nav-button" :class="{ active: currentPage === 'research' }" :aria-current="currentPage === 'research' ? 'page' : undefined" @click="navigate('research')">
           <AppIcon name="layers" :size="18" />
           <span>Research tools</span>
           <AppIcon class="workspace-nav-arrow" name="arrow-up-right" :size="15" />
-        </a>
+        </button>
       </nav>
       <label class="search-box"
         ><AppIcon name="search" :size="16" /><input
@@ -514,8 +575,8 @@ watch(
             <AppIcon name="chat" :size="17" /><span class="conversation-text"
               ><span class="conversation-title">{{ session.title }}</span
               ><span class="conversation-status"
-                ><span class="status-dot" :class="sessionStatus(session)"></span
-                >{{ statusLabel(sessionStatus(session))
+                ><StatusIcon :status="sessionStatus(session) === 'failed' ? 'error' : sessionStatus(session)" :progress="session.runs.at(-1)?.mode === 'demo' ? session.runs.at(-1)?.progress : null" />
+                {{ statusLabel(sessionStatus(session))
                 }}<span v-if="session.runs.length" class="run-count"
                   >· {{ session.runs.length }}
                   {{ session.runs.length === 1 ? "run" : "runs" }}</span
@@ -587,23 +648,26 @@ watch(
             <AppIcon name="sidebar" /></button
           ><span class="breadcrumb-parent">{{ workspaceKind === 'personal' ? 'Your workspace' : 'Demo workspace' }}</span
           ><span class="breadcrumb-divider">/</span
-          ><span class="current-title">{{ currentPage === 'case' ? 'REST-101 sample case' : currentPage === 'timeline' ? 'Bottleneck timeline' : currentPage === 'preflight' ? 'Document preflight' : activeSession?.title }}</span>
+          ><span class="current-title">{{ currentPage === 'case' ? 'REST-101 sample case' : currentPage === 'university' ? 'University IRB preview' : currentPage === 'timeline' ? 'Bottleneck timeline' : currentPage === 'preflight' ? 'Document preflight' : currentPage === 'research' ? 'Research tools' : activeSession?.title }}</span>
         </div>
         <div class="header-status">
+          <WorkspaceModeToggle />
           <span v-if="runningCount" class="running-badge" role="status"
             ><span class="status-dot running"></span
             >{{ runningCount }} running</span
-          ><button class="demo-badge account-status" @click="navigate('login')"><span></span>{{ workspaceKind === 'demo' ? 'Demo mode' : providerReady ? 'OpenAI connected' : 'Connect OpenAI' }}</button>
+          ><button class="demo-badge account-status" @click="navigate('login')"><span></span>{{ workspaceKind === 'demo' ? 'Demo mode' : connectionLabel }}</button>
         </div>
       </header>
       <SampleCaseGraph v-if="currentPage === 'case'" ref="casePage" @navigate="navigate($event)" />
+      <UniversitySimulationPreview v-if="currentPage === 'university'" ref="universityPage" @account="navigate('login')" />
       <BottleneckTimeline :key="timelineStorageKey" ref="timelinePage" :storage-key="timelineStorageKey" v-show="currentPage === 'timeline'" />
       <DocumentPreflight :key="preflightStorageKey" ref="preflightPage" :storage-key="preflightStorageKey" :sample-default="workspaceKind === 'demo'" v-show="currentPage === 'preflight'" />
+      <ResearchTools v-if="researchVisited" v-show="currentPage === 'research'" :key="simulationStorageKey" ref="researchPage" :sessions="sessions" :active-session="activeSession" :storage-key="simulationStorageKey" :workspace-kind="workspaceKind" :provider-connected="workspaceKind === 'personal' && providerReady" :openai-connected="workspaceKind === 'personal' && openaiReady" :anthropic-connected="workspaceKind === 'personal' && anthropicReady" :notice="researchToolsNotice" @select-session="selectChat" @review-setup="reviewResearchSetup" @navigate="navigate" @attach-documents="attachResearchDocuments" />
       <main v-if="activeSession" v-show="currentPage === 'simulations'" class="workspace">
         <div class="workspace-toolbar">
           <div class="workspace-heading">
             <span>Scenario notebook</span>
-            <button v-if="!activeSession.context" type="button" class="secondary-button" :disabled="isRunning" @click="editSetup">Add study context</button>
+            <button v-if="!activeSession.context" type="button" class="secondary-button" :disabled="isRunning || preparingInstitution" @click="editSetup">Add study context</button>
           </div>
           <nav class="view-switcher" aria-label="Workspace view">
             <button
@@ -621,8 +685,9 @@ watch(
         </div>
         <section v-if="activeSession.context" class="simulation-context-bar" aria-label="Simulation setup">
           <div><strong>{{ activeSession.context.university?.name || 'Study context' }}</strong><span>{{ activeSession.context.documents.length }} {{ activeSession.context.documents.length === 1 ? 'document' : 'documents' }}<template v-if="activeSession.context.transcript"> · Voice transcript</template><template v-if="activeSession.context.institution"> · {{ activeSession.context.institution.reviewers?.length || 0 }} reviewer profiles</template></span></div>
-          <button type="button" class="secondary-button" :disabled="isRunning" @click="editSetup">Review setup & sources</button>
+          <button type="button" class="secondary-button" :disabled="isRunning || preparingInstitution" @click="editSetup">Review setup & sources</button>
         </section>
+        <UniversityIRBPanel v-if="workspaceKind === 'personal' && simulationUniversity" class="workspace-irb-panel" compact :university="simulationUniversity" :profile="simulationInstitution" :state="simulationInstitutionState" :error="sharedInstitutionUniversityMatches && !activeSession.context?.institution ? institutionError : ''" :provider="institutionProvider" @refresh="editSetup" />
         <div v-if="storageWarning" class="storage-warning" role="alert">
           <AppIcon name="info" :size="17" />{{ storageWarning }}
         </div>
@@ -637,10 +702,9 @@ watch(
           >
             <div ref="messageList" class="message-scroll">
               <div v-if="!activeSession.messages.length" class="welcome">
-                <h1>Start with <br />a question.</h1>
+                <h1>{{ workspaceKind === 'personal' ? 'Prepare for your IRB review.' : 'Start with a question.' }}</h1>
                 <p class="welcome-copy">
-                  A change in timing. A different approach. A community’s response.
-                  Give your next what-if a place to unfold.
+                  {{ workspaceKind === 'personal' ? `Describe your study. Your simulation will use ${activeSession.context?.university?.name || university?.name} review perspectives and verified university sources.` : 'A change in timing. A different approach. A community’s response. Give your next what-if a place to unfold.' }}
                 </p>
                 <h2 class="starter-heading">Questions to get you started</h2>
                 <div class="starter-grid">
@@ -681,14 +745,14 @@ watch(
                     v-if="message.role === 'assistant'"
                     class="assistant-avatar"
                   >
-                    <AppIcon name="fish" :size="22" />
+                    <LookaheadLogo icon-only style="font-size:22px" />
                   </div>
                   <div class="message-body">
                     <div
                       v-if="message.role === 'assistant'"
                       class="assistant-name"
                     >
-                      Microfish <span>{{ runForMessage(message)?.mode === 'openai' ? 'OPENAI' : 'DEMO' }}</span>
+                      Lookahead <span>{{ providerName(runForMessage(message)?.mode).toUpperCase() }}</span>
                     </div>
                     <p class="message-text">{{ message.content }}</p>
                     <template
@@ -716,24 +780,24 @@ watch(
                               runForMessage(message).status === "running"
                                 ? "Exploring your scenario"
                                 : runForMessage(message).status === "completed"
-                                  ? (runForMessage(message).mode === 'openai' ? 'AI exploration complete' : 'Demo run complete')
+                                  ? (isAIRun(runForMessage(message)) ? 'AI exploration complete' : 'Demo run complete')
                                   : runForMessage(message).status === 'failed' ? 'Run could not complete' : 'Run stopped'
                             }}</strong
                             ><span
-                              >{{ runForMessage(message).mode === 'openai' ? 'OpenAI ·' : 'Local demo ·' }}
+                              >{{ isAIRun(runForMessage(message)) ? `${providerName(runForMessage(message).mode)} ·` : 'Local demo ·' }}
                               {{ runForMessage(message).agentCount }}
-                              {{ runForMessage(message).mode === 'openai' ? 'research perspectives' : 'illustrative agents' }}</span
+                              {{ isAIRun(runForMessage(message)) ? 'research perspectives' : 'illustrative agents' }}</span
                             >
                           </div>
                           <span class="run-percentage"
-                            v-if="runForMessage(message).mode !== 'openai' || runForMessage(message).status === 'completed'"
+                            v-if="!isAIRun(runForMessage(message)) || runForMessage(message).status === 'completed'"
                             >{{
                               Math.round(runForMessage(message).progress)
                             }}%</span
                           >
                         </div>
                         <div
-                          v-if="runForMessage(message).mode !== 'openai' || runForMessage(message).status === 'completed'"
+                          v-if="!isAIRun(runForMessage(message)) || runForMessage(message).status === 'completed'"
                           class="progress-track"
                           role="progressbar"
                           :aria-label="`Run progress for ${runForMessage(message).prompt}`"
@@ -752,7 +816,7 @@ watch(
                         <div class="run-card-footer">
                           <span>{{ runForMessage(message).stage }}</span
                           ><button
-                            v-if="runForMessage(message).id === latestRun?.id && runForMessage(message).mode !== 'openai'"
+                            v-if="runForMessage(message).id === latestRun?.id && !isAIRun(runForMessage(message))"
                             @click="activeView = 'Split'"
                           >
                             View graph
@@ -791,9 +855,10 @@ watch(
                   <label class="composer-meta run-mode-select">
                     <AppIcon name="spark" :size="15" />
                     <span class="sr-only">Simulation provider</span>
-                    <select v-model="runMode" :disabled="isRunning">
+                    <select v-model="runMode" :disabled="isRunning || preparingInstitution">
                       <option value="demo">12 demo agents</option>
-                      <option value="openai" :disabled="workspaceKind === 'demo'">{{ workspaceKind === 'demo' ? 'OpenAI · open your workspace' : providerReady ? 'OpenAI · 3 perspectives' : 'OpenAI · connect API key' }}</option>
+                      <option value="openai" :disabled="workspaceKind === 'demo'">{{ workspaceKind === 'demo' ? 'OpenAI · open your workspace' : openaiReady ? 'OpenAI · 3 perspectives' : 'OpenAI · connect API key' }}</option>
+                      <option value="anthropic" :disabled="workspaceKind === 'demo'">{{ workspaceKind === 'demo' ? 'Anthropic · open your workspace' : anthropicReady ? 'Anthropic · 3 perspectives' : 'Anthropic · connect API key' }}</option>
                     </select>
                   </label><button
                     v-if="isRunning"
@@ -801,14 +866,21 @@ watch(
                     type="button"
                     @click="stopRun(activeId)"
                   >
-                    <AppIcon name="stop" :size="13" />{{ latestRun?.mode === 'openai' ? 'Stop waiting' : 'Stop run' }}</button
+                    <AppIcon name="stop" :size="13" />{{ isAIRun(latestRun) ? 'Stop waiting' : 'Stop run' }}</button
                   ><button
+                    v-else-if="preparingInstitution"
+                    class="stop-button"
+                    type="button"
+                    @click="preparingAbort?.abort(); preparingInstitution = false"
+                  >
+                    <AppIcon name="stop" :size="13" />Stop source check
+                  </button><button
                     v-else
                     class="send-button"
                     type="submit"
                     :disabled="!canSubmit"
                   >
-                    <span>{{ runMode === 'openai' && !providerReady ? 'Connect to run' : 'Run simulation' }}</span
+                    <span>{{ preparingInstitution ? 'Checking university sources…' : runMode !== 'demo' && !selectedProviderReady ? 'Connect to run' : 'Run simulation' }}</span
                     ><AppIcon name="arrow-up" :size="17" />
                   </button>
                 </div>
@@ -817,11 +889,10 @@ watch(
                 {{ submitError }}
               </p>
               <p class="composer-disclaimer">
-                {{ runMode === 'openai' ? 'AI explorations are hypotheses, not research findings. API usage is billed to your OpenAI account.' : (providerReady ? 'Demo runs show the workflow. Choose OpenAI for an AI exploration.' : 'Sample simulations show the workflow. Connect your OpenAI API key to run AI explorations.') }}
+                {{ runMode !== 'demo' ? `AI explorations are hypotheses, not research findings. API usage is billed to your ${providerName(runMode)} account.` : (providerReady ? 'Demo runs show the workflow. Choose a connected provider for an AI exploration.' : 'Sample simulations show the workflow. Connect an OpenAI or Anthropic API key to run AI explorations.') }}
                 {{ workspaceKind === 'personal' ? 'Chats are saved for your Google account in this browser.' : 'Demo chats are saved in this browser.' }}
               </p>
             </div>
-<<<<<<< Updated upstream
           </section>
           <section
             v-if="activeView !== 'Chat'"
@@ -829,7 +900,7 @@ watch(
             aria-label="Simulation graph"
           >
             <SimulationGraph
-              v-if="latestRun?.mode !== 'openai'"
+              v-if="!isAIRun(latestRun)"
               :key="activeId"
               :run="latestRun"
               :session-title="activeSession.title"
@@ -837,7 +908,7 @@ watch(
             <div v-else class="ai-graph-note">
               <AppIcon name="spark" :size="28" />
               <h2>Read the research perspectives</h2>
-              <p>OpenAI responses are available in the chat. The illustrative demo graph does not represent these AI runs.</p>
+              <p>{{ providerName(latestRun?.mode) }} responses are available in the chat. The illustrative demo graph does not represent these AI runs.</p>
               <button class="secondary-button" @click="activeView = 'Chat'">View AI responses</button>
             </div>
             <div v-if="activeView === 'Graph'" class="graph-actions">
@@ -847,70 +918,8 @@ watch(
                 v-if="isRunning"
                 class="stop-button"
                 @click="stopRun(activeId)"
-=======
-          </div>
-        </section>
-
-        <div
-          v-if="activeView === 'split'"
-          class="split-handle"
-          role="separator"
-          tabindex="0"
-          aria-orientation="vertical"
-          aria-label="Resize chat and graph"
-          :aria-valuenow="Math.round(splitRatio)"
-          aria-valuemin="30"
-          aria-valuemax="70"
-          @pointerdown="startResize"
-          @keydown="resizeKeydown"
-        ></div>
-
-        <section v-if="activeView !== 'chat'" class="graph-pane" aria-label="Simulation graph">
-          <SimulationGraph :run="graphRun" :stances="latestStances" :stance-source="latestRecord?.provenance?.model || ''" :session-title="activeSession.title" />
-          <div v-if="activeView === 'graph' && isRunning" class="graph-stop">
-            <button class="stop-btn mono" @click="stopRun(activeId)">
-              <Square :size="11" fill="currentColor" /> stop
-            </button>
-          </div>
-        </section>
-      </main>
-    </div>
-
-    <SettingsDialog v-if="settingsMounted" v-model:open="settingsOpen" :research="research" :account="account" />
-
-    <Dialog v-model:open="paletteOpen">
-      <DialogContent class="overlay-surface overflow-hidden p-0" :show-close-button="false">
-        <DialogTitle class="sr-only">Jump to chat</DialogTitle>
-        <DialogDescription class="sr-only">Search saved simulations by keyword or meaning</DialogDescription>
-        <Command :should-filter="false" @update:search-term="paletteTerm = $event">
-          <CommandInput placeholder="search chats by keyword or meaning…" class="mono text-[12.5px]" />
-          <CommandList>
-            <CommandGroup v-if="!paletteTerm.trim()" heading="actions">
-              <CommandItem value="new simulation" class="mono" @select="newChat">
-                new simulation
-              </CommandItem>
-              <CommandItem value="source library" class="mono" @select="navigate('library')">
-                source library
-              </CommandItem>
-              <CommandItem value="study build" class="mono" @select="navigate('build')">
-                study build
-              </CommandItem>
-              <CommandItem value="document preflight" class="mono" @select="navigate('preflight')">
-                document preflight
-              </CommandItem>
-              <CommandItem value="start-up timeline" class="mono" @select="navigate('timeline')">
-                start-up timeline
-              </CommandItem>
-            </CommandGroup>
-            <CommandGroup heading="chats">
-              <CommandItem
-                v-for="session in paletteSessions"
-                :key="session.id"
-                :value="session.id"
-                @select="selectChat(session.id)"
->>>>>>> Stashed changes
               >
-                <AppIcon name="stop" :size="13" />{{ latestRun?.mode === 'openai' ? 'Stop waiting' : 'Stop run' }}
+                <AppIcon name="stop" :size="13" />{{ isAIRun(latestRun) ? 'Stop waiting' : 'Stop run' }}
               </button>
             </div>
           </section>
@@ -920,7 +929,10 @@ watch(
     <NewSimulationDialog
       :open="setupOpen"
       :personal="workspaceKind === 'personal'"
-      :ai-ready="workspaceKind === 'personal' && providerReady"
+      :ai-ready="workspaceKind === 'personal' && openaiReady"
+      :lookup-ready="workspaceKind === 'personal' && providerReady"
+      :institution-snapshot="institutionSnapshot"
+      :busy="preparingInstitution"
       :university="setupSession?.context?.university || (workspaceKind === 'personal' ? university : null)"
       :initial-context="setupSession?.context || null"
       :initial-title="setupSession?.title || ''"
@@ -963,7 +975,7 @@ watch(
           “{{ dialogSession?.title }}” and its conversation will be removed from
           this device.{{
             dialogSession && sessionStatus(dialogSession) === "running"
-              ? (dialogSession.runs.at(-1)?.mode === 'openai' ? " We will stop waiting for its AI response. Requests already sent may still incur API usage." : " Its running simulation will also stop.")
+              ? (isAIRun(dialogSession.runs.at(-1)) ? " We will stop waiting for its AI response. Requests already sent may still incur API usage." : " Its running simulation will also stop.")
               : ""
           }}
         </p>
@@ -986,3 +998,8 @@ watch(
     </dialog>
   </div>
 </template>
+
+<style scoped>
+.workspace-irb-panel { margin:0 24px 14px; max-height:270px; overflow-y:auto; flex-shrink:0; }
+@media (max-width:760px) { .workspace-irb-panel { margin:0 14px 12px; max-height:190px; } }
+</style>

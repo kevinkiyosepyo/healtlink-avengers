@@ -13,11 +13,11 @@ export function createOpenAIRunTransport(controller, {
 } = {}) {
   const requests = new Map()
 
-  function startOpenAIRun(sessionId, prompt) {
-    const run = controller.startRun(sessionId, prompt, { mode: 'openai' })
+  function startAIRun(sessionId, prompt, provider) {
+    const run = controller.startRun(sessionId, prompt, { mode: provider })
     if (!run) return null
     const context = snapshotSimulationContext(controller.state.sessions.find(session => session.id === sessionId)?.context)
-    const body = JSON.stringify({ prompt: run.prompt, ...(context ? { context } : {}) })
+    const body = JSON.stringify({ ...(provider === 'anthropic' ? { provider } : {}), prompt: run.prompt, ...(context ? { context } : {}) })
     const request = { sessionId, abort: new AbortController() }
     requests.set(run.id, request)
     void (async () => {
@@ -82,7 +82,11 @@ export function createOpenAIRunTransport(controller, {
     for (const sessionId of new Set(Array.from(requests.values(), request => request.sessionId))) stopRun(sessionId)
   }
 
-  return { startOpenAIRun, stopRun, deleteSession, dispose }
+  return {
+    startOpenAIRun: (sessionId, prompt) => startAIRun(sessionId, prompt, 'openai'),
+    startAnthropicRun: (sessionId, prompt) => startAIRun(sessionId, prompt, 'anthropic'),
+    stopRun, deleteSession, dispose,
+  }
 }
 
 export function createScopedSimulationWorkspace({ storage, storageKey = STORAGE_KEY, fetchImpl, windowTarget = globalThis.window, documentTarget = globalThis.document } = {}) {
@@ -160,6 +164,7 @@ export function createScopedSimulationWorkspace({ storage, storageKey = STORAGE_
     deleteSession: (...args) => transport.deleteSession(...args),
     startRun: (...args) => current.value.startRun(...args),
     startOpenAIRun: (...args) => transport.startOpenAIRun(...args),
+    startAnthropicRun: (...args) => transport.startAnthropicRun(...args),
     stopRun: (...args) => transport.stopRun(...args),
     dispose,
   }

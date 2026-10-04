@@ -1,0 +1,87 @@
+/* Both appearances share a single workspace, its routes and its saved state. */
+:root {
+  --ui-body: var(--ui-text);
+  --ui-success: #25806d;
+  --ui-success-bg: #25806d16;
+  --ui-dialog-shadow: 0 24px 100px #14284626;
+  --ui-dialog-backdrop: #15223c55;
+  --ui-tab-shadow: 0 1px 4px #14284608;
+  --ui-drop-border: #a8b7d0;
+  --ui-demo-border: #c8d8f5;
+  --ui-recording: #b83e3e;
+  --font-ui: var(--font-body);
+  /* Retained status and evidence components share the workspace palette. */
+  --canvas: var(--ui-canvas);
+  --surface: var(--ui-surface);
+  --surface-raised: var(--ui-surface-alt);
+  --surface-hover: var(--ui-hover);
+  --hairline: var(--ui-border);
+  --ink: var(--ui-text);
+  --body: var(--ui-body);
+  --faint: var(--ui-muted);
+  --accent: var(--ui-accent);
+  --teal: var(--ui-success);
+  --amber: var(--ui-warning);
+  --danger: var(--ui-danger);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --ui-canvas: #12110f;
+  --ui-surface: #181715;
+  --ui-surface-alt: #1f1e1b;
+  --ui-text: #faf9f5;
+  --ui-body: #c9c6bf;
+  --ui-muted: #aaa69d;
+  --ui-accent: #cc785c;
+  --ui-on-accent: #12110f;
+  --ui-border: #35322e;
+  --ui-control-border: #777168;
+  --ui-hover: #252320;
+  --ui-selected: #322720;
+  --ui-focus: #e8a087;
+  --ui-shadow: 0 16px 36px #00000040;
+  --ui-backdrop: #080706b8;
+  --ui-warning: #e8a55a;
+  --ui-warning-bg: #342719;
+  --ui-danger: #ed9a8b;
+  --ui-danger-bg: #38221f;
+  --ui-info: #93b6cf;
+  --ui-info-bg: #202b33;
+  --ui-purple: #bda2c5;
+  --ui-purple-bg: #2d2331;
+  --ui-success: #5db8a6;
+  --ui-success-bg: #5db8a619;
+  --ui-dialog-shadow: 0 24px 48px #00000080;
+  --ui-dialog-backdrop: #080706b8;
+  --ui-tab-shadow: none;
+  --ui-drop-border: #777168;
+  --ui-demo-border: #5c4439;
+  --ui-recording: #ed9a8b;
+  --graph-scenario: #d6b8a8;
+  --graph-factor: #a8937c;
+  --graph-outcome: #bda2c5;
+  --graph-research: #cc785c;
+  --graph-ethics: #bda2c5;
+  --graph-training: #b9a06e;
+  --graph-operations: #5db8a6;
+  --graph-data: #7f97ab;
+  --graph-participants: #8fa68a;
+}
+
+:root[data-theme='dark'] :is(.sidebar, .login-setup, .graph-inspector, .graph-zoom-controls) {
+  box-shadow: none;
+}
+:root[data-theme='dark'] :is(.workspace-nav-label, .graph-eyebrow, .case-graph-eyebrow, .login-option-label, .login-small-label, .case-review-state, .graph-layout-status) {
+  font-family: var(--font-data);
+}
+:root[data-theme='dark'] .message-body { color: var(--ui-body); }
+:root[data-theme='dark'] .message-user .message-body { color: var(--ui-text); }
+
+@media (prefers-contrast: more) {
+  :root[data-theme] { --ui-border: var(--ui-control-border); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  :root[data-theme='dark'] { --ui-backdrop: #12110f; --ui-dialog-backdrop: #12110f; --ui-shadow: none; --ui-dialog-shadow: none; }
+  :root:not([data-theme='dark']) { --ui-dialog-backdrop: #edf2f8; --ui-dialog-shadow: none; }
+}

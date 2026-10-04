@@ -18,13 +18,15 @@ const boundedText = (value, limit) => typeof value === 'string' ? value.slice(0,
 const timestamp = (value, fallback) => Number.isFinite(value) && value >= 0 ? value : fallback
 const validId = value => typeof value === 'string' && value.length > 0 && value.length <= 120
 const uniqueId = () => globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+const isAIRun = mode => mode === 'openai' || mode === 'anthropic'
+const providerName = mode => mode === 'anthropic' ? 'Anthropic' : 'OpenAI'
 
 export function runStage(progress, status = 'running', mode = 'demo') {
-  if (mode === 'openai') {
-    if (status === 'completed') return 'AI exploration complete'
-    if (status === 'failed') return 'Could not complete'
+  if (isAIRun(mode)) {
+    if (status === 'completed') return mode === 'anthropic' ? 'Anthropic exploration complete' : 'AI exploration complete'
+    if (status === 'failed') return mode === 'anthropic' ? 'Anthropic could not complete' : 'Could not complete'
     if (status === 'stopped') return 'Stopped'
-    return 'Waiting for OpenAI agents'
+    return `Waiting for ${providerName(mode)} agents`
   }
   if (status === 'completed') return 'Demo complete'
   if (status === 'stopped') return 'Stopped'
@@ -35,15 +37,16 @@ export function runStage(progress, status = 'running', mode = 'demo') {
 }
 
 function assistantContent(run) {
-  if (run.mode === 'openai') {
+  if (isAIRun(run.mode)) {
+    const exploration = run.mode === 'anthropic' ? 'Anthropic exploration' : 'AI exploration'
     // Completed AI text lives in the assistant message, avoiding a second copy
     // of the response in every persisted run.
     if (run.status === 'completed') return null
-    if (run.status === 'failed') return `AI exploration could not complete. ${run.error || 'Please try again.'} Your question is saved in this chat.`
+    if (run.status === 'failed') return `${exploration} could not complete. ${run.error || 'Please try again.'} Your question is saved in this chat.`
     if (run.status === 'stopped') return run.interrupted
-      ? 'This AI exploration was interrupted when the page reloaded. Your question is saved; run it again to retry.'
-      : 'Stopped waiting for this AI run. Your question is saved. Requests already sent to OpenAI may still finish and incur API usage.'
-    return 'OpenAI agents are reviewing your question. You can switch chats while this exploration runs.'
+      ? `This ${exploration} was interrupted when the page reloaded. Your question is saved; run it again to retry.`
+      : `Stopped waiting for this AI run. Your question is saved. Requests already sent to ${providerName(run.mode)} may still finish and incur API usage.`
+    return `${providerName(run.mode)} agents are reviewing your question. You can switch chats while this exploration runs.`
   }
   if (run.status === 'completed') {
     return 'Demo complete. All 12 sample agents finished the scenario walkthrough. This demonstrates a separate simulation run for this chat; no AI model or simulation backend was called, and no research findings were generated. You can ask a follow-up to start another demo run, or keep this chat and start a different scenario.'
@@ -58,18 +61,19 @@ function blankSession(now, id) {
 
 function normalizeRun(raw, now) {
   if (!raw || !validId(raw.id) || !['running', 'completed', 'stopped', 'failed'].includes(raw.status)) return null
-  const mode = raw.mode === 'openai' ? 'openai' : 'demo'
-  const interrupted = mode === 'openai' && (raw.status === 'running' || raw.interrupted === true)
-  const status = mode === 'openai' && raw.status === 'running' ? 'stopped' : raw.status
+  const mode = isAIRun(raw.mode) ? raw.mode : 'demo'
+  const real = isAIRun(mode)
+  const interrupted = real && (raw.status === 'running' || raw.interrupted === true)
+  const status = real && raw.status === 'running' ? 'stopped' : raw.status
   const startedAt = Math.min(timestamp(raw.startedAt, now), now)
   const durationMs = Number.isFinite(raw.durationMs) && raw.durationMs > 0 && raw.durationMs <= 120000 ? raw.durationMs : DEMO_DURATION_MS
-  const progress = status === 'completed' ? 100 : mode === 'openai' ? 0 : Math.max(0, Math.min(100, Number(raw.progress) || 0))
+  const progress = status === 'completed' ? 100 : real ? 0 : Math.max(0, Math.min(100, Number(raw.progress) || 0))
   return {
     id: raw.id, prompt: boundedText(raw.prompt, PROMPT_LIMIT), status, mode,
     startedAt, completedAt: status === 'running' ? null : timestamp(raw.completedAt, now),
-    durationMs: mode === 'openai' ? 0 : durationMs,
-    agentCount: mode === 'openai' ? 3 : 12, progress, stage: runStage(progress, status, mode),
-    ...(mode === 'openai' ? { model: boundedText(raw.model, 100), error: boundedText(raw.error, 800), interrupted } : {}),
+    durationMs: real ? 0 : durationMs,
+    agentCount: real ? 3 : 12, progress, stage: runStage(progress, status, mode),
+    ...(real ? { model: boundedText(raw.model, 100), error: boundedText(raw.error, 800), interrupted } : {}),
   }
 }
 
@@ -101,7 +105,7 @@ function normalizeSession(raw, now) {
   }))
   for (const message of messages) {
     const run = runs.find(run => run.id === message.runId)
-    if (message.role === 'assistant' && run?.mode === 'openai' && run.status !== 'completed') message.content = assistantContent(run)
+    if (message.role === 'assistant' && isAIRun(run?.mode) && run.status !== 'completed') message.content = assistantContent(run)
   }
   const latestRun = runs.at(-1)
   const interruptedRun = latestRun?.interrupted ? latestRun : null
@@ -281,7 +285,7 @@ export function createWorkspaceController({ storage, storageKey = STORAGE_KEY, n
     let finished = false
     for (const session of state.sessions) {
       for (const run of session.runs) {
-        if (run.status !== 'running' || run.mode === 'openai') continue
+        if (run.status !== 'running' || isAIRun(run.mode)) continue
         run.progress = Math.min(100, Math.max(0, Math.floor((currentTime - run.startedAt) / run.durationMs * 100)))
         if (run.progress >= 100) {
           run.status = 'completed'
@@ -310,8 +314,8 @@ export function createWorkspaceController({ storage, storageKey = STORAGE_KEY, n
       return null
     }
     const startedAt = now()
-    const runMode = mode === 'openai' ? 'openai' : 'demo'
-    const run = { id: id(), prompt: cleaned, mode: runMode, status: 'running', startedAt, completedAt: null, durationMs: runMode === 'openai' ? 0 : durationMs, agentCount: runMode === 'openai' ? 3 : 12, progress: 0, stage: runStage(0, 'running', runMode) }
+    const runMode = isAIRun(mode) ? mode : 'demo'
+    const run = { id: id(), prompt: cleaned, mode: runMode, status: 'running', startedAt, completedAt: null, durationMs: isAIRun(runMode) ? 0 : durationMs, agentCount: isAIRun(runMode) ? 3 : 12, progress: 0, stage: runStage(0, 'running', runMode) }
     session.runs.push(run)
     session.messages.push(
       { id: id(), role: 'user', content: cleaned, createdAt: startedAt, runId: run.id },
@@ -334,7 +338,7 @@ export function createWorkspaceController({ storage, storageKey = STORAGE_KEY, n
     run.status = 'stopped'
     run.completedAt = now()
     run.stage = runStage(run.progress, run.status, run.mode)
-    if (run.mode === 'openai' && !session.draft) session.draft = run.prompt
+    if (isAIRun(run.mode) && !session.draft) session.draft = run.prompt
     session.updatedAt = run.completedAt
     updateAssistant(session, run)
     persist()
@@ -344,7 +348,7 @@ export function createWorkspaceController({ storage, storageKey = STORAGE_KEY, n
   function finishRun(sessionId, runId, { content, model } = {}) {
     const session = getSession(sessionId)
     const run = session?.runs.find(run => run.id === runId)
-    if (!run || run.mode !== 'openai' || run.status !== 'running') return false
+    if (!run || !isAIRun(run.mode) || run.status !== 'running') return false
     const cleaned = boundedText(content, AI_RESPONSE_LIMIT).trim()
     if (!cleaned) return failRun(sessionId, runId, 'The server returned an empty response. Please try again.')
     const message = session.messages.find(message => message.role === 'assistant' && message.runId === run.id)
@@ -364,7 +368,7 @@ export function createWorkspaceController({ storage, storageKey = STORAGE_KEY, n
   function failRun(sessionId, runId, message) {
     const session = getSession(sessionId)
     const run = session?.runs.find(run => run.id === runId)
-    if (!run || run.mode !== 'openai' || run.status !== 'running') return false
+    if (!run || !isAIRun(run.mode) || run.status !== 'running') return false
     run.status = 'failed'
     run.completedAt = now()
     run.error = boundedText(message, 800).trim() || 'The request failed. Please try again.'

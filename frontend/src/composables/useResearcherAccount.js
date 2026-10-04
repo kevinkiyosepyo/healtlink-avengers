@@ -1,15 +1,17 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
 export function useResearcherAccount() {
-  const account = reactive({ loading: true, configured: false, providers: { google: false, chatgpt: false }, user: null, openaiConnected: false })
+  const account = reactive({ loading: true, configured: false, providers: { google: false, chatgpt: false }, user: null, openaiConnected: false, anthropicConnected: false, cloudSync: false })
   const busy = ref(false)
   const error = ref('')
-  const ready = computed(() => Boolean(account.user && account.openaiConnected))
+  const openaiReady = computed(() => Boolean(account.user && account.openaiConnected))
+  const anthropicReady = computed(() => Boolean(account.user && account.anthropicConnected))
+  const ready = computed(() => openaiReady.value || anthropicReady.value)
   let refreshGeneration = 0
   let refreshError = false
 
-  async function request(path, options = {}) {
-    const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(15000), ...options })
+  async function request(path, options = {}, timeoutMs = 15000) {
+    const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(timeoutMs), ...options })
     const isJSON = response.headers.get('content-type')?.includes('application/json')
     if (!isJSON) throw new Error('Account services are unavailable. You can still explore the demo.')
     const result = await response.json()
@@ -22,12 +24,13 @@ export function useResearcherAccount() {
     try {
       const result = await request('/api/account')
       if (generation !== refreshGeneration) return
-      Object.assign(account, { configured: result.configured === true, providers: result.providers || { google: result.configured === true, chatgpt: false }, user: result.user || null, openaiConnected: result.openaiConnected === true })
+      Object.assign(account, { configured: result.configured === true, providers: result.providers || { google: result.configured === true, chatgpt: false }, user: result.user || null, openaiConnected: result.openaiConnected === true, anthropicConnected: result.anthropicConnected === true, cloudSync: result.cloudSync === true })
       if (refreshError) error.value = ''
       refreshError = false
     } catch (cause) {
       if (generation !== refreshGeneration) return
-      Object.assign(account, { configured: false, providers: { google: false, chatgpt: false }, user: null, openaiConnected: false })
+      // Failed verification is not a sign-out. Keep the last confirmed account
+      // until a successful response reports that its session has ended.
       error.value = cause.name === 'TimeoutError' ? 'Account services took too long to respond. Please try again.' : cause.message
       refreshError = true
     } finally {
@@ -51,7 +54,7 @@ export function useResearcherAccount() {
     return request(`/api/auth/${name}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Auth-Return-Redirect': '1' },
-      body: new URLSearchParams({ csrfToken, callbackUrl: `${window.location.origin}${window.location.pathname}#/login` }),
+      body: new URLSearchParams({ csrfToken, callbackUrl: `${window.location.origin}/#/login` }),
     })
   }
 
@@ -76,17 +79,32 @@ export function useResearcherAccount() {
   })
 
   const connect = apiKey => action(async () => {
-    await request('/api/openai', {
+    const result = await request('/api/openai', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey }),
-    })
+    }, 55000)
+    if (result.openaiConnected === true) account.openaiConnected = true
     await refresh()
   })
   const disconnect = () => action(async () => {
     await request('/api/openai', { method: 'DELETE' })
+    account.openaiConnected = false
+    await refresh()
+  })
+  const connectAnthropic = (apiKey, workspaceId = '') => action(async () => {
+    const result = await request('/api/anthropic', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ apiKey, ...(workspaceId ? { workspaceId } : {}) }),
+    }, 55000)
+    if (result.anthropicConnected === true) account.anthropicConnected = true
+    await refresh()
+  })
+  const disconnectAnthropic = () => action(async () => {
+    await request('/api/anthropic', { method: 'DELETE' })
+    account.anthropicConnected = false
     await refresh()
   })
   const signout = () => action(async () => {
     await authAction('signout')
+    Object.assign(account, { user: null, openaiConnected: false, anthropicConnected: false })
     await refresh()
   })
 
@@ -98,5 +116,5 @@ export function useResearcherAccount() {
     window.addEventListener('focus', onFocus)
   })
   onUnmounted(() => { refreshGeneration++; window.removeEventListener('focus', onFocus) })
-  return { account, busy, error, ready, refresh, google, chatgpt, connect, disconnect, signout }
+  return { account, busy, error, ready, openaiReady, anthropicReady, refresh, google, chatgpt, connect, disconnect, connectAnthropic, disconnectAnthropic, signout }
 }

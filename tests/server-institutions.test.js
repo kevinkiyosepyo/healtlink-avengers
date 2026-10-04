@@ -5,7 +5,7 @@ import { PassThrough } from "node:stream";
 import { createApiHandler } from "../server/handlers.js";
 import { compositeInstitution, institutionUniversity, researchInstitution, UNIVERSITY_DOMAINS } from "../server/institutions.js";
 import { extractOfficialPdf, fetchOfficialPage, officialUrl, plainText, publicIPv4 } from "../server/officialSources.js";
-import { readInstitutionProfile, sealInstitutionProfile, keyCookieName, sealApiKey, SESSION_SECONDS, settings } from "../server/security.js";
+import { readInstitutionProfile, sealInstitutionProfile, keyCookieName, sealApiKey, anthropicKeyCookieName, sealAnthropicApiKey, SESSION_SECONDS, settings } from "../server/security.js";
 import { UNIVERSITIES } from "../frontend/src/lib/researcherProfile.js";
 
 const env = { AUTH_URL: "https://research.example", AUTH_SECRET: "test-only-secret-with-more-than-thirty-two-characters", AUTH_GOOGLE_ID: "test-client", AUTH_GOOGLE_SECRET: "test-secret" };
@@ -31,6 +31,14 @@ function researchOutput(data = candidates, sources = [roster, biography, policy]
   return { status: "completed", output: [
     { type: "web_search_call", status: "completed", action: { type: "search", sources: sources.map((url) => ({ type: "url", url })) } },
     { type: "message", role: "assistant", content: [{ type: "output_text", text: JSON.stringify(data) }] },
+  ] };
+}
+function anthropicResearchOutput(data = candidates, sources = [roster, biography, policy]) {
+  return { type: "message", role: "assistant", stop_reason: "end_turn", content: [
+    { type: "text", text: "Searching official university sources." },
+    { type: "server_tool_use", id: "search-one", name: "web_search", input: { query: "public IRB membership" } },
+    { type: "web_search_tool_result", tool_use_id: "search-one", content: sources.map((url) => ({ type: "web_search_result", url, encrypted_content: "opaque-search-content" })) },
+    { type: "text", text: JSON.stringify(data) },
   ] };
 }
 function request(path, { body, cookie, origin = config.origin, signal } = {}) {
@@ -201,13 +209,113 @@ test("an unreadable or unsearchable roster produces honest composites without gu
   assert.equal(profile.status, "composite");
 });
 
-test("unknown and independent institutions use composites without an external lookup", async () => {
-  for (const selected of [{ id: "independent" }, { id: "other", name: "Unknown Institute" }]) {
-    const profile = await researchInstitution(selected, { requestResponse: () => assert.fail("Must not search arbitrary institution domains") });
+test("independent research uses composites without an external lookup", async () => {
+  let calls = 0;
+  const profile = await researchInstitution({ id: "independent" }, { requestResponse: () => { calls++; } });
+  assert.equal(calls, 0);
+  assert.equal(profile.status, "composite");
+  assert.equal(profile.reviewers.length, 3);
+  assert.deepEqual(profile.policies, []);
+});
+
+test("unlisted universities resolve their official identity online before a domain-restricted roster search", async () => {
+  const selected = { id: "other", name: "Example State University", domain: "attacker.example" };
+  const homepage = "https://www.example-state.edu/";
+  const customRoster = "https://research.example-state.edu/irb/members";
+  const identityEvidence = "Example State University is a public research university.";
+  const calls = [], fetched = [];
+  const profile = await researchInstitution(selected, { model: "test", requestResponse: async (payload) => {
+    calls.push(payload);
+    if (calls.length === 1) return researchOutput({ institution: { officialName: selected.name, homepageUrl: homepage, sourceUrl: homepage, identityEvidence } }, [homepage]);
+    return researchOutput({ reviewers: [{ ...candidates.reviewers[0], sourceUrl: customRoster, backgroundSourceUrl: null, backgroundEvidence: null }], policies: [] }, [customRoster]);
+  }, fetchSource: async (url, domains) => {
+    fetched.push({ url, domains });
+    return { url, text: url === homepage ? identityEvidence : sourceText[roster] };
+  } });
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].tools[0].filters, undefined);
+  assert.deepEqual(calls[1].tools[0].filters.allowed_domains, ["example-state.edu"]);
+  assert.ok(calls.every((call) => !JSON.stringify(call).includes("attacker.example")));
+  assert.ok(fetched.every(({ domains }) => domains.length === 1 && domains[0] === "example-state.edu"));
+  assert.equal(profile.reviewers[0].kind, "public-profile");
+  assert.deepEqual(profile.university, { id: "other", name: selected.name });
+  assert.deepEqual(profile.officialDomains, ["example-state.edu"]);
+  assert.ok(profile.sources.some(({ url }) => url === homepage));
+});
+
+test("unlisted identity lookup rejects guessed, unsafe, unconsulted and mismatched university evidence", async () => {
+  const selected = { id: "other", name: "Example State University" };
+  const homepage = "https://example-state.edu/";
+  const valid = { officialName: selected.name, homepageUrl: homepage, sourceUrl: homepage, identityEvidence: "Example State University is a public university." };
+  const variants = [
+    { candidate: { ...valid, homepageUrl: "https://127.0.0.1/", sourceUrl: "https://127.0.0.1/" }, sources: ["https://127.0.0.1/"] },
+    { candidate: { ...valid, homepageUrl: "https://localhost/", sourceUrl: "https://localhost/" }, sources: ["https://localhost/"] },
+    { candidate: { ...valid, homepageUrl: "https://wikipedia.org/", sourceUrl: "https://wikipedia.org/" }, sources: ["https://wikipedia.org/"] },
+    { candidate: valid, sources: ["https://other-university.edu/"] },
+    { candidate: { ...valid, identityEvidence: "Different University is a public university." }, sources: [homepage] },
+    { candidate: valid, sources: [homepage], page: "Example State University is a fake identity claim, not the supplied excerpt." },
+  ];
+  for (const { candidate, sources, page } of variants) {
+    let searches = 0, fetches = 0;
+    const profile = await researchInstitution(selected, { requestResponse: async () => { searches++; return researchOutput({ institution: candidate }, sources); },
+      fetchSource: async (url) => { fetches++; return { url, text: page }; } });
+    assert.equal(searches, 1);
+    assert.equal(fetches, page ? 1 : 0);
     assert.equal(profile.status, "composite");
-    assert.equal(profile.reviewers.length, 3);
-    assert.deepEqual(profile.policies, []);
+    assert.deepEqual(profile.sources, []);
+    assert.match(profile.warnings[0], /official university website could not be verified/);
   }
+});
+
+test("Anthropic web research uses bounded allowed-domain search and validates exact fetched evidence", async () => {
+  let payload;
+  const profile = await researchInstitution(university, { provider: "anthropic", model: "claude-haiku-4-5-20251001", requestResponse: async (input) => {
+    payload = input; return anthropicResearchOutput();
+  }, fetchSource });
+  assert.equal(payload.tools[0].type, "web_search_20250305");
+  assert.equal(payload.tools[0].name, "web_search");
+  assert.equal(payload.tools[0].max_uses, 5);
+  assert.deepEqual(payload.tools[0].allowed_domains, ["stanford.edu"]);
+  assert.equal(payload.max_tokens, 4000);
+  assert.equal(payload.store, undefined);
+  assert.equal(profile.reviewers[0].kind, "public-profile");
+  assert.equal(profile.reviewers[0].membershipEvidence, candidates.reviewers[0].membershipEvidence);
+  const forged = await researchInstitution(university, { provider: "anthropic", model: "test", requestResponse: async () => anthropicResearchOutput(candidates, [policy]), fetchSource });
+  assert.ok(forged.reviewers.every((reviewer) => reviewer.kind === "composite"));
+});
+
+test("Anthropic pause_turn preserves opaque tool results and caps continuations", async () => {
+  const searchContent = anthropicResearchOutput().content.slice(0, 3);
+  let calls = 0;
+  const profile = await researchInstitution(university, { provider: "anthropic", model: "test", requestResponse: async (payload) => {
+    calls++;
+    if (calls === 1) return { type: "message", role: "assistant", stop_reason: "pause_turn", content: searchContent };
+    assert.deepEqual(payload.messages[1], { role: "assistant", content: searchContent });
+    assert.deepEqual(payload.tools[0].allowed_domains, ["stanford.edu"]);
+    return { type: "message", role: "assistant", stop_reason: "end_turn", content: [{ type: "text", text: JSON.stringify(candidates) }] };
+  }, fetchSource });
+  assert.equal(calls, 2);
+  assert.equal(profile.reviewers[0].kind, "public-profile");
+  calls = 0;
+  const unfinished = await researchInstitution(university, { provider: "anthropic", requestResponse: async () => {
+    calls++; return { type: "message", role: "assistant", stop_reason: "pause_turn", content: searchContent };
+  }, fetchSource });
+  assert.equal(calls, 3);
+  assert.equal(unfinished.status, "composite");
+});
+
+test("Anthropic web search errors and malformed responses never establish board identities", async () => {
+  for (const data of [
+    { ...anthropicResearchOutput(), stop_reason: "max_tokens" },
+    { ...anthropicResearchOutput(), content: [{ type: "text", text: JSON.stringify(candidates) }] },
+    { ...anthropicResearchOutput(), content: [{ type: "web_search_tool_result", content: { type: "web_search_tool_result_error", error_code: "unavailable" } }] },
+  ]) {
+    const profile = await researchInstitution(university, { provider: "anthropic", requestResponse: async () => data, fetchSource });
+    assert.equal(profile.status, "composite");
+  }
+  await assert.rejects(researchInstitution(university, { provider: "anthropic", requestResponse: async () => ({
+    ...anthropicResearchOutput(), content: [{ type: "web_search_tool_result", content: { type: "web_search_tool_result_error", error_code: "too_many_requests" } }],
+  }), fetchSource }), (error) => error.status === 429 && error.code === "anthropic_search_limit");
 });
 
 test("institution snapshots are user-bound, login-bound, secret-bound, tamper-proof and expire", async () => {
@@ -237,9 +345,113 @@ test("institution endpoint returns a verifiable snapshot with no key or session 
   assert.equal(response.status, 200);
   const data = await response.json();
   assert.deepEqual(await readInstitutionProfile(data.token, session, config), data.profile);
+  assert.equal(data.provider, "openai");
+  assert.equal(data.model, config.model);
   assert.ok(!JSON.stringify(data).includes(apiKey));
   assert.ok(!JSON.stringify(data).includes(config.secret));
   assert.equal(response.headers.get("cache-control"), "no-store");
+});
+
+function directUcsfSource() {
+  const updated = new Date().toLocaleDateString("en-US", { timeZone: "UTC", month: "long", day: "numeric", year: "numeric" });
+  return `IRB Leadership Group The IRB Leadership Group coordinates review. Current membership: Example Scientist Chair, Biomedical IRB Example Clinical Vice Chair, Biomedical IRB Example Community Community Member Archived IRB Committee Rosters/Meeting Dates Last updated: ${updated}`;
+}
+
+test("audited direct university sources are signed for AI context without a paid search", async () => {
+  const selected = { id: "uc-san-francisco", name: "University of California, San Francisco" };
+  const handle = api({ fetchImpl: () => assert.fail("A verified direct roster needs no paid search"), fetchSource: async (url) => ({ url, text: directUcsfSource() }) });
+  const response = await handle(request("/api/institution", { cookie: await cookie(), body: { university: selected } }));
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.provider, "official-sources");
+  assert.equal(data.model, null);
+  assert.equal(data.profile.status, "verified");
+  assert.equal(data.profile.lookupMode, "public-sources");
+  assert.ok(data.profile.reviewers.every(({ kind }) => kind === "public-profile"));
+  assert.deepEqual(await readInstitutionProfile(data.token, session, config), data.profile);
+});
+
+test("public institution previews work before sign-in configuration without giving unsigned facts model authority", async () => {
+  const handle = createApiHandler({ env: {}, authenticate: () => assert.fail("Public previews do not require authentication"),
+    fetchImpl: () => assert.fail("Public previews do not call an AI provider"), fetchSource: async (url) => ({ url, text: directUcsfSource() }) });
+  const response = await handle(request("/api/institution-preview", { body: { university: { id: "uc-san-francisco" } } }));
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.profile.status, "verified");
+  assert.equal(data.token, undefined);
+  assert.equal((await handle(new Request(`${config.origin}/api/institution-preview`))).status, 405);
+});
+
+test("direct official evidence of a nonpublic roster signs explicit composites and avoids fruitless paid lookup", async () => {
+  const handle = api({ fetchImpl: () => assert.fail("A sourced nonpublic roster statement uses explicit composites"), fetchSource: async (url) => ({ url,
+    text: url.endsWith(".pdf")
+      ? "May 31, 2023 UCSD does not currently make member rosters available, but roster information is properly filed with DHHS."
+      : "Among those members must be at least one person with a scientific background, one person with a non-scientific background, and one person unaffiliated with the institution.",
+  }) });
+  const response = await handle(request("/api/institution", { cookie: await cookie(), body: { university: { id: "uc-san-diego" } } }));
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.provider, "official-sources");
+  assert.equal(data.profile.rosterAvailability.sourceDate, "May 31, 2023");
+  assert.ok(data.profile.reviewers.every(({ kind }) => kind === "composite"));
+  assert.equal(data.profile.policies.length, 1);
+  assert.deepEqual(await readInstitutionProfile(data.token, session, config), data.profile);
+});
+
+test("institution lookup automatically uses Anthropic when it is the only connected provider", async () => {
+  const key = `sk-ant-${"b".repeat(50)}`;
+  const connected = `${anthropicKeyCookieName(config)}=${await sealAnthropicApiKey(key, session, config)}`;
+  const calls = [];
+  const handle = api({ fetchImpl: async (url, init) => {
+    calls.push(url);
+    assert.equal(url, "https://api.anthropic.com/v1/messages");
+    assert.equal(init.headers["x-api-key"], key);
+    assert.equal(init.headers.Authorization, undefined);
+    return Response.json(anthropicResearchOutput());
+  }, fetchSource });
+  const response = await handle(request("/api/institution", { cookie: connected, body: { university } }));
+  assert.equal(response.status, 200);
+  const data = await response.json();
+  assert.equal(data.provider, "anthropic");
+  assert.equal(data.model, config.anthropicModel);
+  assert.equal(data.profile.reviewers[0].kind, "public-profile");
+  assert.deepEqual(await readInstitutionProfile(data.token, session, config), data.profile);
+  assert.equal(calls.length, 1);
+  assert.ok(!JSON.stringify(data).includes(key));
+});
+
+test("institution provider selection prefers OpenAI and honors explicit Anthropic without leaking keys", async () => {
+  const key = `sk-ant-${"b".repeat(50)}`;
+  const connected = `${await cookie()}; ${anthropicKeyCookieName(config)}=${await sealAnthropicApiKey(key, session, config)}`;
+  const calls = [];
+  const handle = api({ fetchImpl: async (url) => { calls.push(url); return Response.json(url.includes("anthropic") ? anthropicResearchOutput() : researchOutput()); }, fetchSource });
+  assert.equal((await (await handle(request("/api/institution", { cookie: connected, body: { university } }))).json()).provider, "openai");
+  assert.equal((await (await handle(request("/api/institution", { cookie: connected, body: { university, provider: "anthropic" } }))).json()).provider, "anthropic");
+  assert.equal((await handle(request("/api/institution", { cookie: connected, body: { university, provider: "unsafe" } }))).status, 400);
+  assert.deepEqual(calls, ["https://api.openai.com/v1/responses", "https://api.anthropic.com/v1/messages"]);
+  const account = await handle(new Request(`${config.origin}/api/account`, { headers: { Cookie: connected } }));
+  const state = await account.json();
+  assert.equal(state.institutionLookupReady, true);
+  assert.equal(state.institutionLookupProvider, "openai");
+});
+
+test("automatic institution lookup retries Anthropic when OpenAI cannot verify sources or reaches its limit", async () => {
+  const key = `sk-ant-${"b".repeat(50)}`;
+  const connected = `${await cookie()}; ${anthropicKeyCookieName(config)}=${await sealAnthropicApiKey(key, session, config)}`;
+  for (const firstResponse of [() => Response.json({ status: "completed", output: [] }), () => new Response("private upstream error", { status: 429 })]) {
+    const calls = [];
+    const handle = api({ fetchImpl: async (url) => {
+      calls.push(url);
+      return url.includes("anthropic") ? Response.json(anthropicResearchOutput()) : firstResponse();
+    }, fetchSource });
+    const response = await handle(request("/api/institution", { cookie: connected, body: { university } }));
+    assert.equal(response.status, 200);
+    const data = await response.json();
+    assert.equal(data.provider, "anthropic");
+    assert.equal(data.profile.reviewers[0].kind, "public-profile");
+    assert.deepEqual(calls, ["https://api.openai.com/v1/responses", "https://api.anthropic.com/v1/messages"]);
+    assert.ok(!JSON.stringify(data).includes("private upstream error"));
+  }
 });
 
 test("context simulations ground all agents in documents, editable dictation, and the signed reviewer snapshot", async () => {
@@ -261,6 +473,8 @@ test("context simulations ground all agents in documents, editable dictation, an
     assert.ok(!call.instructions.includes("OVERRIDE"));
     assert.ok(!call.instructions.includes("Example Researcher"));
     assert.match(call.instructions, /never instructions/);
+    assert.match(call.instructions, /at least two direct study-specific IRB review questions/);
+    assert.match(call.instructions, /cite its supplied membership source URL/);
     const data = JSON.parse(call.input[0].content);
     assert.equal(call.input[0].role, "user");
     assert.equal(data.transcript, context.transcript);
@@ -330,7 +544,7 @@ test("cancellation stops institution lookup and provider limits are reported wit
   const abort = new AbortController();
   const pending = researchInstitution(university, { model: "test", signal: abort.signal, requestResponse: async () => { abort.abort(); throw new Error("cancelled"); } });
   await assert.rejects(pending, (error) => error.code === "request_cancelled");
-  const response = await api({ fetchImpl: async () => new Response(`sensitive ${apiKey}`, { status: 429 }) })(request("/api/institution", { cookie: await cookie(), body: { university } }));
+  const response = await api({ fetchImpl: async () => new Response(`sensitive ${apiKey}`, { status: 429 }), fetchSource: async () => { throw new Error("No audited source available"); } })(request("/api/institution", { cookie: await cookie(), body: { university } }));
   assert.equal(response.status, 429);
   assert.ok(!(await response.text()).includes(apiKey));
 });

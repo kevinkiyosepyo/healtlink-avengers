@@ -4,7 +4,7 @@ import { encode } from "@auth/core/jwt";
 import { createApiHandler } from "../server/handlers.js";
 import { authenticate, authConfig } from "../server/auth.js";
 import { nodeHandler } from "../server/node.js";
-import { settings, readApiKey, sealApiKey, keyCookie, keyCookieName, SESSION_SECONDS } from "../server/security.js";
+import { settings, readApiKey, sealApiKey, keyCookie, keyCookieName, anthropicKeyCookieName, SESSION_SECONDS } from "../server/security.js";
 
 const env = {
   AUTH_URL: "https://research.example",
@@ -34,7 +34,7 @@ test("missing and invalid auth settings leave an honest anonymous account", asyn
     const api = createApiHandler({ env: invalid });
     const response = await api(request("/api/account"));
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { configured: false, user: null, openaiConnected: false });
+    assert.deepEqual(await response.json(), { configured: false, user: null, openaiConnected: false, anthropicConnected: false, institutionLookupReady: false, institutionLookupProvider: null });
     assert.equal((await api(request("/api/simulate", { method: "POST", body: { prompt: "hello" } }))).status, 503);
   }
 });
@@ -118,17 +118,22 @@ test("mutations enforce exact Origin, including signout and same-site subdomains
   }
 });
 
-test("connecting verifies only against OpenAI and never exposes a key in JSON", async () => {
+test("connecting verifies model generation only against OpenAI and never exposes a key in JSON", async () => {
   let target;
   const api = handler({ fetchImpl: async (url, init) => {
     target = url;
     assert.equal(init.headers.Authorization, `Bearer ${apiKey}`);
     assert.equal(init.redirect, "error");
-    return new Response(JSON.stringify({ data: [] }), { status: 200 });
+    const payload = JSON.parse(init.body);
+    assert.equal(payload.model, config.model);
+    assert.equal(payload.max_output_tokens, 16);
+    assert.equal(payload.store, false);
+    assert.deepEqual(payload.input, [{ role: "user", content: "Reply exactly OK" }]);
+    return Response.json({ status: "completed", output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: "OK" }] }] });
   } });
   const response = await api(request("/api/openai", { method: "POST", body: { apiKey } }));
   assert.equal(response.status, 200);
-  assert.equal(target, "https://api.openai.com/v1/models");
+  assert.equal(target, "https://api.openai.com/v1/responses");
   const body = await response.text();
   assert.ok(!body.includes(apiKey));
   const cookie = response.headers.get("set-cookie").split(";")[0];
@@ -154,7 +159,7 @@ test("invalid keys and malformed or oversized payloads never reach OpenAI", asyn
 });
 
 test("upstream failures return safe messages without reflecting credentials or provider data", async () => {
-  for (const [upstreamStatus, expected] of [[401, 401], [403, 401], [429, 429], [500, 502]]) {
+  for (const [upstreamStatus, expected] of [[401, 401], [403, 403], [429, 429], [500, 502]]) {
     const api = handler({ fetchImpl: async () => new Response(`Sensitive ${apiKey}`, { status: upstreamStatus }) });
     const response = await api(request("/api/openai", { method: "POST", body: { apiKey } }));
     assert.equal(response.status, expected);
@@ -210,7 +215,7 @@ test("simulation input bounds, incomplete results, and account responses stay sa
   assert.equal(account.headers.get("cache-control"), "no-store");
 });
 
-test("Auth.js signout requires CSRF and clears the OpenAI cookie", async () => {
+test("Auth.js signout requires CSRF and clears both AI provider cookies", async () => {
   const api = handler();
   const csrf = await api(request("/api/auth/csrf"));
   assert.equal(csrf.status, 200);
@@ -224,6 +229,7 @@ test("Auth.js signout requires CSRF and clears the OpenAI cookie", async () => {
   }));
   assert.equal(signout.status, 200);
   assert.ok(signout.headers.getSetCookie().some((cookie) => cookie.startsWith(`${keyCookieName(config)}=;`) && cookie.includes("Max-Age=0")));
+  assert.ok(signout.headers.getSetCookie().some((cookie) => cookie.startsWith(`${anthropicKeyCookieName(config)}=;`) && cookie.includes("Max-Age=0")));
   assert.equal((await signout.json()).url, `${config.origin}/#/login`);
 });
 

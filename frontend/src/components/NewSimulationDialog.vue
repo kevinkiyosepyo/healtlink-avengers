@@ -1,11 +1,14 @@
 <script setup>
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
-import { IMPORT_LIMITS, importSimulationFile, validateSimulationContext } from '../lib/simulationImports.js'
+import { IMPORT_LIMITS, SIMULATION_IMPORT_ACCEPT, importSimulationFile, validateSimulationContext } from '../lib/simulationImports.js'
 import { createVoiceDictation } from '../lib/voiceDictation.js'
 import ProviderDictation from './ProviderDictation.vue'
+import UniversityIRBPanel from './UniversityIRBPanel.vue'
+import { isInstitutionSnapshotFresh } from '../lib/institutionProfile.js'
 
 const props = defineProps({
   open: Boolean, university: { type: Object, default: null }, personal: Boolean, aiReady: Boolean,
+  lookupReady: Boolean, institutionSnapshot: { type: Object, default: null },
   initialContext: { type: Object, default: null }, initialTitle: { type: String, default: '' },
   initialQuestion: { type: String, default: '' }, busy: Boolean, error: { type: String, default: '' },
 })
@@ -26,6 +29,7 @@ const importError = ref('')
 const localError = ref('')
 const lookupState = ref('idle')
 const lookupError = ref('')
+const lookupProvider = ref('')
 const voiceState = ref('idle')
 const voiceError = ref('')
 const interim = ref('')
@@ -51,17 +55,6 @@ const contextError = computed(() => validateSimulationContext(context.value))
 const characterCount = computed(() => overview.value.length + transcript.value.length + documents.value.reduce((sum, doc) => sum + doc.text.length, 0))
 const hasContext = computed(() => Boolean(overview.value.trim() || transcript.value.trim() || documents.value.length))
 const canSubmit = computed(() => !props.busy && !importing.value && !dictating.value && !providerBusy.value && lookupState.value !== 'loading' && !contextError.value && (hasContext.value || question.value.trim()))
-const reviewers = computed(() => Array.isArray(institution.value?.reviewers) ? institution.value.reviewers : [])
-const safeSources = computed(() => (Array.isArray(institution.value?.sources) ? institution.value.sources : []).filter(source => {
-  try { return new URL(source.url).protocol === 'https:' } catch { return false }
-}))
-const lookupDate = computed(() => {
-  const date = new Date(institution.value?.retrievedAt || '')
-  return Number.isFinite(date.getTime()) ? date.toLocaleString() : ''
-})
-const institutionMode = computed(() => institution.value?.status || institution.value?.mode || 'composite')
-const institutionWarnings = computed(() => Array.isArray(institution.value?.warnings) ? institution.value.warnings.filter(item => typeof item === 'string') : [])
-const institutionPolicies = computed(() => Array.isArray(institution.value?.policies) ? institution.value.policies : [])
 
 function makeVoice() {
   voice?.destroy()
@@ -108,21 +101,57 @@ function fallbackProfile() {
 }
 function restoreInstitutionSnapshot() {
   const saved = props.initialContext
-  if (props.personal && saved?.institution && saved.university?.id === props.university?.id && saved.university?.name === props.university?.name) {
+  if (props.personal && isInstitutionSnapshotFresh({ profile: saved?.institution, token: saved?.institutionToken }, props.university, { requireToken: props.lookupReady })) {
     request?.abort()
     request = null
     institution.value = JSON.parse(JSON.stringify(saved.institution))
     institutionToken.value = saved.institutionToken || ''
     lookupState.value = 'ready'
     lookupError.value = ''
+    lookupProvider.value = saved.institution.lookupMode === 'public-sources' ? 'official-sources' : ''
     return true
+  }
+  const shared = props.institutionSnapshot
+  if (props.personal && shared?.university?.id === props.university?.id && shared.university.name === props.university?.name) {
+    if (isInstitutionSnapshotFresh(shared, props.university, { requireToken: props.lookupReady })) {
+      request?.abort()
+      request = null
+      institution.value = JSON.parse(JSON.stringify(shared.profile))
+      institutionToken.value = shared.token || ''
+      lookupState.value = 'ready'
+      lookupError.value = ''
+      lookupProvider.value = shared.provider || ''
+      return true
+    }
+    if (shared.state === 'loading') {
+      request?.abort()
+      request = null
+      institution.value = null
+      institutionToken.value = ''
+      lookupState.value = 'loading'
+      lookupError.value = ''
+      lookupProvider.value = ''
+      return true
+    }
+    if (shared.state === 'fallback') {
+      request?.abort()
+      request = null
+      institution.value = fallbackProfile()
+      institutionToken.value = ''
+      lookupState.value = 'fallback'
+      lookupProvider.value = ''
+      lookupError.value = `${shared.error} Retry the lookup, or continue with clearly labeled composite reviewers.`
+      return true
+    }
   }
   return false
 }
 async function loadInstitution() {
   request?.abort()
+  request = null
+  lookupProvider.value = ''
   institutionToken.value = ''
-  if (!props.personal || !props.university || !props.aiReady || props.university.id === 'independent') {
+  if (!props.personal || !props.university || props.university.id === 'independent') {
     institution.value = null
     lookupState.value = 'idle'
     return
@@ -133,9 +162,9 @@ async function loadInstitution() {
   const current = generation
   const controller = new AbortController()
   request = controller
-  const timeout = setTimeout(() => controller.abort(), 90000)
+  const timeout = setTimeout(() => controller.abort(), 150000)
   try {
-    const response = await fetch('/api/institution', {
+    const response = await fetch(props.lookupReady ? '/api/institution' : '/api/institution-preview', {
       method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ university: { id: props.university.id, name: props.university.name } }), signal: controller.signal,
     })
@@ -144,6 +173,7 @@ async function loadInstitution() {
     if (current !== generation || !props.open || request !== controller) return
     institution.value = result.profile
     institutionToken.value = typeof result.token === 'string' ? result.token : ''
+    lookupProvider.value = result.provider || 'official-sources'
     lookupState.value = 'ready'
   } catch (error) {
     if (current !== generation || !props.open || request !== controller) return
@@ -226,6 +256,7 @@ watch(() => props.open, async opened => {
   localError.value = ''
   lookupError.value = ''
   activeTab.value = 'files'
+  lookupProvider.value = ''
   makeVoice()
   await nextTick()
   if (!props.open) return
@@ -233,7 +264,7 @@ watch(() => props.open, async opened => {
   titleInput.value?.focus()
   if (!restoreInstitutionSnapshot()) loadInstitution()
 }, { immediate: true })
-watch(() => [props.university?.id, props.university?.name, props.personal, props.aiReady], () => { if (props.open && !restoreInstitutionSnapshot()) loadInstitution() })
+watch(() => [props.university?.id, props.university?.name, props.personal, props.lookupReady, props.institutionSnapshot], () => { if (props.open && !restoreInstitutionSnapshot()) loadInstitution() })
 onUnmounted(cleanup)
 </script>
 
@@ -261,7 +292,7 @@ onUnmounted(cleanup)
                 <strong>{{ importing ? 'Reading your documents…' : 'Drop your study materials here' }}</strong>
                 <p>PDF, Markdown, text, or ZIP · up to 15 MB each</p>
                 <button type="button" class="setup-secondary" :disabled="busy || importing" @click="fileInput?.click()">{{ importing ? 'Importing…' : 'Choose files' }}</button>
-                <input ref="fileInput" class="sr-only" type="file" multiple accept=".pdf,.md,.markdown,.txt,.zip" tabindex="-1" aria-label="Import study documents" @change="addFiles($event.target.files)" />
+                <input ref="fileInput" class="sr-only" type="file" multiple :accept="SIMULATION_IMPORT_ACCEPT" tabindex="-1" aria-label="Import study documents" @change="addFiles($event.target.files)" />
               </div>
               <p class="setup-note">Up to 12 documents and 40,000 characters each. ZIP files may contain PDFs, Markdown, and text. Scanned PDFs need OCR first.</p>
               <p v-if="importError" class="setup-error" role="alert">{{ importError }}</p>
@@ -292,24 +323,9 @@ onUnmounted(cleanup)
             </div>
           </section>
 
-          <section v-if="personal && university" class="setup-institution" aria-labelledby="setup-institution-heading">
-            <div class="setup-section-heading"><h3 id="setup-institution-heading">Review perspectives</h3><span>{{ university.name }}</span></div>
-            <button v-if="aiReady && university.id !== 'independent' && institution" type="button" class="setup-inline-button" :disabled="lookupState === 'loading'" @click="loadInstitution">Refresh sources</button>
-            <p v-if="!aiReady" class="setup-note">Connect OpenAI in your account to retrieve university sources and personalize AI reviewers. This setup will use a local demo until connected.</p>
-            <p v-else-if="university.id === 'independent'" class="setup-note">The simulation will use clearly labeled composite IRB perspectives for an independent researcher.</p>
-            <p v-else-if="lookupState === 'loading'" class="setup-lookup" role="status"><span class="setup-spinner"></span> Finding institutional sources using your connected OpenAI account…</p>
-            <template v-else-if="institution">
-              <p class="setup-note">{{ institution.summary || 'AI review perspectives based on the available institutional sources.' }}</p>
-              <p v-if="lookupError" class="setup-notice" role="status">{{ lookupError }} <button type="button" class="setup-inline-button" @click="loadInstitution">Retry lookup</button></p>
-              <div v-if="reviewers.length" class="setup-reviewers"><article v-for="(reviewer, index) in reviewers" :key="reviewer.id || index"><strong>{{ reviewer.name || reviewer.role }}</strong><span>{{ reviewer.role }}</span><p>{{ reviewer.background || reviewer.expertise || reviewer.description }}</p><small>{{ reviewer.kind === 'public-profile' ? 'AI reviewer informed by a public profile' : 'Composite AI reviewer' }}</small></article></div>
-              <details v-if="institutionPolicies.length" class="setup-sources"><summary>Institutional policy context · {{ institutionPolicies.length }}</summary><ul><li v-for="(policy, index) in institutionPolicies" :key="index"><strong>{{ policy.title }}</strong><p>{{ policy.summary }}</p></li></ul></details>
-              <p v-for="(warning, index) in institutionWarnings" :key="index" class="setup-note">{{ warning }}</p>
-              <p class="setup-note">These are AI simulations, not statements or decisions by a university or its board members. {{ institutionMode === 'composite' ? 'No actual member identities are assumed.' : '' }}</p>
-              <details v-if="safeSources.length" class="setup-sources"><summary>Sources used · {{ safeSources.length }}</summary><ul><li v-for="(source, index) in safeSources" :key="index"><a :href="source.url" target="_blank" rel="noopener noreferrer">{{ source.title || source.url }}</a></li></ul></details>
-              <p v-if="lookupDate" class="setup-note">Source snapshot retrieved {{ lookupDate }}</p>
-            </template>
-            <p v-if="aiReady && university.id !== 'independent'" class="setup-note">Institution lookups use your connected OpenAI API account. Usage is billed to that account.</p>
-          </section>
+          <UniversityIRBPanel v-if="personal && university" :university="university" :profile="institution" :state="lookupState" :error="lookupError" :provider="lookupProvider" @refresh="loadInstitution" />
+          <p v-if="personal && university?.id === 'independent'" class="setup-note">Independent research uses explicitly labeled composite IRB reviewers.</p>
+          <p v-if="personal && lookupReady" class="setup-note">Online AI searches use a connected provider when needed. Direct public university sources do not require a model request.</p>
 
           <div class="setup-field"><label for="simulation-question">What should the simulation explore? <span>Optional</span></label><textarea id="simulation-question" v-model="question" maxlength="2000" rows="3" placeholder="e.g. What concerns could reviewers raise about consent and recruitment?" :disabled="busy" /><small>Leave blank to review ethical concerns, missing information, and next steps.</small></div>
           <p v-if="contextError || localError || error" class="setup-error" role="alert">{{ contextError || localError || error }}</p>
@@ -321,8 +337,8 @@ onUnmounted(cleanup)
 </template>
 
 <style scoped>
-.new-simulation-dialog { border:1px solid var(--ui-border); border-radius:20px; padding:0; width:min(760px, calc(100vw - 32px)); max-height:calc(100dvh - 48px); color:var(--ui-text); background:var(--ui-surface); box-shadow:0 24px 100px #14284626; }
-.new-simulation-dialog::backdrop { background:#15223c55; backdrop-filter:blur(5px); }
+.new-simulation-dialog { border:1px solid var(--ui-border); border-radius:20px; padding:0; width:min(760px, calc(100vw - 32px)); max-height:calc(100dvh - 48px); color:var(--ui-text); background:var(--ui-surface); box-shadow:var(--ui-dialog-shadow); }
+.new-simulation-dialog::backdrop { background:var(--ui-dialog-backdrop); backdrop-filter:blur(5px); }
 .simulation-setup { display:flex; flex-direction:column; max-height:calc(100dvh - 50px); margin:0; }
 .setup-header { padding:26px 30px 21px; border-bottom:1px solid var(--ui-border); display:flex; justify-content:space-between; gap:20px; flex-shrink:0; }
 .setup-eyebrow { color:var(--ui-accent); font-size:.68rem; text-transform:uppercase; letter-spacing:.11em; font-weight:650; }
@@ -342,9 +358,9 @@ onUnmounted(cleanup)
 .setup-section-heading > span { font-size:.73rem; color:var(--ui-muted); text-align:right; }
 .setup-tabs { display:flex; gap:4px; background:var(--ui-surface-alt); padding:4px; border-radius:9px; margin-bottom:14px; }
 .setup-tabs button { flex:1; border:1px solid transparent; background:transparent; color:var(--ui-muted); border-radius:7px; font-size:.8rem; display:flex; align-items:center; justify-content:center; gap:8px; }
-.setup-tabs button[aria-selected='true'] { color:var(--ui-accent); background:var(--ui-surface); border-color:var(--ui-border); box-shadow:0 1px 4px #14284608; }
+.setup-tabs button[aria-selected='true'] { color:var(--ui-accent); background:var(--ui-surface); border-color:var(--ui-border); box-shadow:var(--ui-tab-shadow); }
 .setup-tabs button > span:not(.recording-dot) { background:var(--ui-selected); padding:1px 6px; border-radius:5px; font-size:.7rem; }
-.setup-dropzone { border:1px dashed #a8b7d0; background:var(--ui-surface-alt); border-radius:11px; text-align:center; padding:24px 15px; display:flex; flex-direction:column; align-items:center; color:var(--ui-accent); }
+.setup-dropzone { border:1px dashed var(--ui-drop-border); background:var(--ui-surface-alt); border-radius:11px; text-align:center; padding:24px 15px; display:flex; flex-direction:column; align-items:center; color:var(--ui-accent); }
 .setup-dropzone.dragging { background:var(--ui-selected); border-color:var(--ui-accent); }
 .setup-dropzone strong { font-size:.86rem; font-weight:500; margin-top:12px; color:var(--ui-text); }
 .setup-dropzone p { margin:7px 0 14px; color:var(--ui-muted); font-size:.74rem; }
@@ -371,7 +387,7 @@ onUnmounted(cleanup)
 .setup-voice-intro p { font-size:.75rem; color:var(--ui-muted); margin:5px 0 0; line-height:1.5; }
 .setup-voice-controls { display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
 .setup-voice-status { display:flex; align-items:center; gap:7px; color:var(--ui-muted); font-size:.73rem; }
-.recording-dot { width:7px; height:7px; display:inline-block; background:#b83e3e; border-radius:50%; }
+.recording-dot { width:7px; height:7px; display:inline-block; background:var(--ui-recording); border-radius:50%; }
 #setup-voice-panel > .setup-field { margin-top:17px; }
 .setup-interim { font-size:.79rem; font-style:italic; line-height:1.5; color:var(--ui-muted); padding:8px 12px; border-left:2px solid var(--ui-accent); margin:10px 0 0; }
 .setup-institution { border-top:1px solid var(--ui-border); border-bottom:1px solid var(--ui-border); padding:18px 0; }

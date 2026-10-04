@@ -172,6 +172,8 @@ const labelPlacements = computed(() => {
       node.id === selectedId.value ||
       matchIds.value.has(node.id);
     if (!showLabels.value && !forced) continue;
+    // At overview scale, label each role once; its other lenses remain searchable.
+    if (node.lensId && node.lensId !== "case-review" && k < 0.9 && !forced) continue;
     const font = rootFontSize.value * (node.type === "scenario" ? .875 : .75);
     const width = labelFor(node).length * font * 0.56;
     const x = node.x * k + camera.value.x,

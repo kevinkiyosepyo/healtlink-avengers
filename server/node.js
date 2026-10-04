@@ -1,12 +1,10 @@
 import { BODY_LIMIT, HttpError, SIMULATION_BODY_LIMIT, json } from "./security.js";
 import { AUDIO_BODY_LIMIT } from "./transcription.js";
-import { SYNC_BODY_LIMIT } from "./sync.js";
 
-async function toWebRequest(req, signal) {
+async function toWebRequest(req, signal, trustedPlatform) {
   const pathname = (req.url || '/').split('?')[0].replace(/\/$/, '')
-  const bodyLimit = pathname === '/api/simulate' ? SIMULATION_BODY_LIMIT
-    : pathname === '/api/transcribe' ? AUDIO_BODY_LIMIT
-      : pathname === '/api/sync' || pathname.startsWith('/api/sync/') ? SYNC_BODY_LIMIT : BODY_LIMIT
+  const bodyLimit = ['/api/simulate', '/api/evidence'].includes(pathname) ? SIMULATION_BODY_LIMIT
+    : pathname === '/api/transcribe' ? AUDIO_BODY_LIMIT : BODY_LIMIT
   const headers = new Headers();
   for (const [name, value] of Object.entries(req.headers || {})) {
     if (Array.isArray(value)) value.forEach((entry) => headers.append(name, entry));
@@ -31,18 +29,24 @@ async function toWebRequest(req, signal) {
     }
     if (Buffer.byteLength(body) > bodyLimit) throw new HttpError(413, "request_too_large", "The request is too large.");
   }
-  const protocol = req.socket?.encrypted ? "https" : "http";
+  // Vercel terminates TLS before Node. Only its platform-marked deployment may
+  // use the forwarded protocol; local clients cannot choose the request origin.
+  const forwardedProtocol = headers.get("x-forwarded-proto");
+  if (trustedPlatform && forwardedProtocol !== null && !["https", "http"].includes(forwardedProtocol)) {
+    throw new HttpError(400, "invalid_forwarded_protocol", "The request protocol is invalid.");
+  }
+  const protocol = req.socket?.encrypted || (trustedPlatform && forwardedProtocol === "https") ? "https" : "http";
   const url = new URL(req.url || "/", `${protocol}://${headers.get("host") || "localhost"}`);
   return new Request(url, { method: req.method || "GET", headers, body, signal });
 }
 
-export function nodeHandler(handler) {
+export function nodeHandler(handler, { env = process.env } = {}) {
   return async (req, res) => {
     const abort = new AbortController();
     req.once?.("aborted", () => abort.abort());
     res.once?.("close", () => { if (!res.writableEnded) abort.abort(); });
     let response;
-    try { response = await handler(await toWebRequest(req, abort.signal)); }
+    try { response = await handler(await toWebRequest(req, abort.signal, env.VERCEL === "1")); }
     catch (error) {
       response = error instanceof HttpError
         ? json({ error: error.message, code: error.code }, error.status)

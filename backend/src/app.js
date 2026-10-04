@@ -10,7 +10,7 @@ const DIST = fileURLToPath(new URL("../../frontend/dist", import.meta.url));
 // the same account API handlers in Express, Vite development, and Vercel.
 export function createApp({ serveStatic = existsSync(DIST), env = process.env } = {}) {
   const app = express();
-  const accountApi = nodeHandler(createApiHandler({ env }));
+  const accountApi = nodeHandler(createApiHandler({ env }), { env });
   app.disable("x-powered-by");
 
   app.use((req, res, next) => {
@@ -40,11 +40,7 @@ export function createApp({ serveStatic = existsSync(DIST), env = process.env } 
 
   app.get("/api/health", (req, res) => res.json({ ok: true }));
   app.use((req, res, next) => {
-<<<<<<< Updated upstream
-    if (["/api/account", "/api/openai", "/api/simulate", "/api/institution", "/api/transcribe", "/api/sync"].includes(req.path) || req.path.startsWith("/api/sync/")
-=======
-    if (["/api/account", "/api/openai", "/api/simulate"].includes(req.path)
->>>>>>> Stashed changes
+    if (["/api/account", "/api/openai", "/api/anthropic", "/api/simulate", "/api/institution", "/api/institution-preview", "/api/transcribe", "/api/evidence"].includes(req.path)
       || req.path === "/api/auth" || req.path.startsWith("/api/auth/")) {
       return accountApi(req, res);
     }

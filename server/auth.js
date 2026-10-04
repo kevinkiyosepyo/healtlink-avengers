@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Auth } from "@auth/core";
 import Google from "@auth/core/providers/google";
 import { getToken } from "@auth/core/jwt";
-import { SESSION_SECONDS, keyCookie } from "./security.js";
+import { SESSION_SECONDS, anthropicKeyCookie, keyCookie } from "./security.js";
 
 export function authConfig(config) {
   return {
@@ -78,6 +78,7 @@ export async function handleAuth(request, config) {
   response.headers.set("X-Content-Type-Options", "nosniff");
   if (incoming.pathname === "/api/auth/signout" && request.method === "POST") {
     response.headers.append("Set-Cookie", keyCookie("", config, 0));
+    response.headers.append("Set-Cookie", anthropicKeyCookie("", config, 0));
   }
   return response;
 }

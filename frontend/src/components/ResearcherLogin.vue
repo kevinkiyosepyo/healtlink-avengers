@@ -1,7 +1,11 @@
 <script setup>
 import { computed, onUnmounted, ref, watch } from "vue";
 import AppIcon from "./AppIcon.vue";
+import { SAMPLE_AGENT_COUNT, SAMPLE_ROLE_COUNT, SAMPLE_REVIEW_LENSES } from "../lib/sampleCaseGraph.js";
+import LookaheadLogo from "./LookaheadLogo.vue";
 import UniversitySelection from "./UniversitySelection.vue";
+import WorkspaceModeToggle from "./WorkspaceModeToggle.vue";
+import UniversityIRBPanel from "./UniversityIRBPanel.vue";
 
 const props = defineProps({
   account: {
@@ -12,23 +16,33 @@ const props = defineProps({
   error: { type: String, default: "" },
   university: { type: Object, default: null },
   universityError: { type: String, default: "" },
+  institutionSnapshot: { type: Object, default: null },
 });
 const emit = defineEmits([
   "google",
   "connect",
   "disconnect",
+  "connect-anthropic",
+  "disconnect-anthropic",
   "signout",
   "continue",
   "demo",
   "save-university",
+  "refresh-institution",
 ]);
 const heading = ref(null);
 const apiKey = ref("");
 const keyInput = ref(null);
+const anthropicKey = ref("");
+const anthropicWorkspaceId = ref("");
+const anthropicKeyInput = ref(null);
+const anthropicError = ref("");
 const localError = ref("");
 const universityEditing = ref(false);
-const message = computed(() => localError.value || props.error);
+const message = computed(() => localError.value || anthropicError.value || props.error);
 const connected = computed(() => Boolean(props.account.user && props.account.openaiConnected));
+const anthropicConnected = computed(() => Boolean(props.account.user && props.account.anthropicConnected));
+const preferredMode = computed(() => connected.value ? "openai" : anthropicConnected.value ? "anthropic" : "demo");
 const googleAvailable = computed(() => props.account.configured);
 const isLocalPreview = typeof window !== "undefined" && ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
 const liveSignIn = computed(() => isLocalPreview && !googleAvailable.value);
@@ -37,7 +51,10 @@ const initial = computed(() => displayName.value.trim().charAt(0).toUpperCase())
 
 function clearKey() {
   apiKey.value = "";
+  anthropicKey.value = "";
+  anthropicWorkspaceId.value = "";
   localError.value = "";
+  anthropicError.value = "";
 }
 
 function connect() {
@@ -48,13 +65,29 @@ function connect() {
     keyInput.value?.focus();
     return;
   }
-  clearKey();
+  apiKey.value = "";
+  localError.value = "";
   emit("connect", key);
 }
 
 function signout() {
   clearKey();
   emit("signout");
+}
+
+function connectAnthropic() {
+  if (props.busy || !props.account.user) return;
+  const key = anthropicKey.value.trim();
+  if (!key) {
+    anthropicError.value = "Enter your Anthropic API key to connect.";
+    anthropicKeyInput.value?.focus();
+    return;
+  }
+  const workspaceId = anthropicWorkspaceId.value.trim();
+  anthropicKey.value = "";
+  anthropicWorkspaceId.value = "";
+  anthropicError.value = "";
+  emit("connect-anthropic", key, workspaceId);
 }
 
 function leave(event, mode) {
@@ -70,33 +103,34 @@ defineExpose({ focusHeading: () => heading.value?.focus(), clearKey });
 
 <template>
   <section class="researcher-login" aria-labelledby="researcher-login-heading">
+    <div class="login-appearance"><WorkspaceModeToggle /></div>
     <div class="login-layout">
       <div class="login-introduction">
         <div class="login-eyebrow"><span></span> Researcher workspace</div>
-        <div class="login-brand-mark"><AppIcon name="fish" :size="38" /></div>
+        <LookaheadLogo class="login-brand-mark" />
         <h1 id="researcher-login-heading" ref="heading" tabindex="-1">
-          {{ account.user ? "Your next research step, in focus." : "Explore the paths your research could take." }}
+          Predict the Future
         </h1>
-        <p class="login-lead">Explore the paths ahead, uncover bottlenecks, and bring your research team’s next steps into focus.</p>
+        <p class="login-lead">Run simulations to explore possible outcomes, uncover bottlenecks, and plan your next research step.</p>
 
         <div class="login-benefits">
           <div><span class="login-benefit-icon"><AppIcon name="timeline" :size="19" /></span><div><strong>See what moves next</strong><p>Trace dependencies across your research timeline.</p></div></div>
           <div><span class="login-benefit-icon"><AppIcon name="branch" :size="19" /></span><div><strong>Explore the what-ifs</strong><p>Use AI to examine a scenario from different perspectives.</p></div></div>
           <div><span class="login-benefit-icon"><AppIcon name="people" :size="19" /></span><div><strong>Start with your account</strong><p>Sign in and explore your research workspace.</p></div></div>
         </div>
-        <div class="login-footnote"><AppIcon name="spark" :size="16" /><span>Built for the questions before the breakthrough.</span></div>
+        <div class="login-footnote"><AppIcon name="spark" :size="16" /><span>Simulate possibilities before making your next move.</span></div>
       </div>
 
       <div class="login-options">
         <section class="login-setup login-demo-card" aria-labelledby="demo-option-title">
           <div class="login-option-label"><span class="login-option-number">01</span><span>Explore a sample</span><span class="login-fictional-label">Fictional case</span></div>
           <div class="login-setup-heading">
-            <h2 id="demo-option-title">Explore a case through 60 perspectives.</h2>
-            <p>Open an interactive knowledge graph of the REST-101 study. Follow 60 simulated agents as they review Alex’s research onboarding.</p>
+            <h2 id="demo-option-title">Explore a case through {{ SAMPLE_AGENT_COUNT }} perspectives.</h2>
+            <p>Follow simulated IRB board members, research teams, and participant perspectives as they review Alex’s onboarding in the fictional REST-101 study.</p>
           </div>
           <div class="login-case-preview">
             <span class="login-case-icon"><AppIcon name="graph" :size="22" /></span>
-            <div><strong>60 agents. Six areas of expertise.</strong><span>Drag the graph, inspect agents, and follow the scripted review.</span></div>
+            <div><strong>{{ SAMPLE_AGENT_COUNT }} scripted agents. Six areas of expertise.</strong><span>{{ SAMPLE_ROLE_COUNT }} fictional roles × {{ SAMPLE_REVIEW_LENSES.length }} review lenses. Inspect each perspective on the graph.</span></div>
           </div>
           <button type="button" class="login-demo-button" @click="leave('demo')">Explore the sample case <AppIcon name="arrow-right" :size="17" /></button>
           <p class="login-demo-note">No account or API key needed.</p>
@@ -106,7 +140,7 @@ defineExpose({ focusHeading: () => heading.value?.focus(), clearKey });
         <div class="login-option-label"><span class="login-option-number">02</span><span>Your research</span></div>
         <div class="login-setup-heading">
           <h2 id="personal-option-title">{{ account.user ? "Welcome back to your workspace." : "Start your own research." }}</h2>
-          <p>Sign in with Google to keep your scenario chats and document checks together. Connect OpenAI to explore your own research questions with AI.</p>
+          <p>Sign in with Google to keep your scenario chats and document checks together. Connect OpenAI or Anthropic to explore your own research questions with AI.</p>
         </div>
 
         <div v-if="account.loading" class="login-loading" role="status"><span class="login-spinner"></span> Checking your connections…</div>
@@ -146,6 +180,7 @@ defineExpose({ focusHeading: () => heading.value?.focus(), clearKey });
             @save="emit('save-university', $event)"
             @editing="universityEditing = $event"
           />
+          <UniversityIRBPanel v-if="account.user && university" style="margin-top:18px" compact :university="university" :profile="institutionSnapshot?.profile" :state="institutionSnapshot?.state || 'idle'" :error="institutionSnapshot?.error || ''" :provider="institutionSnapshot?.provider || ''" @refresh="emit('refresh-institution')" />
 
           <section class="login-step" :class="{ 'is-complete': connected }" aria-labelledby="provider-step-title">
             <div class="login-step-heading">
@@ -164,15 +199,43 @@ defineExpose({ focusHeading: () => heading.value?.focus(), clearKey });
                 <AppIcon name="lock" :size="16" />
                 <input id="researcher-openai-key" ref="keyInput" v-model="apiKey" name="openai-api-key" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="sk-…" :disabled="!account.user || busy" aria-describedby="openai-key-note" :aria-invalid="Boolean(localError)" @input="localError = ''" />
               </div>
-              <p id="openai-key-note" class="login-key-note">Create a key in your <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">OpenAI dashboard <span class="sr-only">(opens in a new tab)</span><AppIcon name="arrow-up-right" :size="12" /></a>. Simulation usage is billed to that API account, separately from a ChatGPT subscription.</p>
+              <p id="openai-key-note" class="login-key-note">Create a key in your <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">OpenAI dashboard <span class="sr-only">(opens in a new tab)</span><AppIcon name="arrow-up-right" :size="12" /></a> with Responses permission and API billing enabled. Connecting runs a short, billed test before simulations. A ChatGPT subscription does not cover API usage.</p>
               <button type="submit" class="login-connect-button" :disabled="!account.user || busy || !apiKey.trim()"><AppIcon name="spark" :size="17" />{{ busy ? 'Connecting…' : 'Connect OpenAI' }}</button>
               <p class="login-subtle-note">{{ account.user ? 'Your key is encrypted for this sign-in session and removed when you disconnect or sign out.' : 'Sign in with Google first to connect your key.' }}</p>
             </form>
           </section>
 
+          <section class="login-step" :class="{ 'is-complete': anthropicConnected }" aria-labelledby="anthropic-step-title">
+            <div class="login-step-heading">
+              <span class="login-step-number" :class="{ complete: anthropicConnected }"><AppIcon :name="anthropicConnected ? 'check' : 'spark'" :size="15" /></span>
+              <div><h3 id="anthropic-step-title">Connect Anthropic</h3><p>{{ anthropicConnected ? 'Your Claude API connection is ready.' : 'Use Claude for your AI simulations.' }}</p></div>
+              <span v-if="anthropicConnected" class="login-status">Connected</span>
+            </div>
+
+            <template v-if="anthropicConnected">
+              <div class="login-provider-connected"><span class="login-provider-icon"><AppIcon name="spark" :size="22" /></span><div><strong>Anthropic API</strong><span>Claude is ready for AI simulations</span></div><button type="button" class="login-text-button" :disabled="busy" @click="emit('disconnect-anthropic')">Disconnect Anthropic</button></div>
+              <p class="login-subtle-note">Simulation usage is billed to your Anthropic API account.</p>
+            </template>
+            <form v-else @submit.prevent="connectAnthropic">
+              <label for="researcher-anthropic-key">Anthropic API key</label>
+              <div class="login-key-field">
+                <AppIcon name="lock" :size="16" />
+                <input id="researcher-anthropic-key" ref="anthropicKeyInput" v-model="anthropicKey" name="anthropic-api-key" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="sk-ant-…" :disabled="!account.user || busy" aria-describedby="anthropic-key-note" :aria-invalid="Boolean(anthropicError)" @input="anthropicError = ''" />
+              </div>
+              <p id="anthropic-key-note" class="login-key-note">Create a key in the <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener noreferrer">Anthropic Console <span class="sr-only">(opens in a new tab)</span><AppIcon name="arrow-up-right" :size="12" /></a> with model access and API credit. Connecting runs a short, billed test before simulations. A Claude subscription does not cover API usage.</p>
+              <label for="researcher-anthropic-workspace">Workspace ID (optional)</label>
+              <div class="login-key-field">
+                <input id="researcher-anthropic-workspace" v-model="anthropicWorkspaceId" name="anthropic-workspace-id" type="text" maxlength="150" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="wrkspc_…" :disabled="!account.user || busy" aria-describedby="anthropic-workspace-note" />
+              </div>
+              <p id="anthropic-workspace-note" class="login-key-note">Leave blank for a key scoped to one workspace. For a multi-workspace key, copy its workspace ID from <a href="https://platform.claude.com/settings/workspaces" target="_blank" rel="noopener noreferrer">Console Workspaces <span class="sr-only">(opens in a new tab)</span><AppIcon name="arrow-up-right" :size="12" /></a>.</p>
+              <button type="submit" class="login-connect-button" :disabled="!account.user || busy || !anthropicKey.trim()"><AppIcon name="spark" :size="17" />{{ busy ? 'Connecting…' : 'Connect Anthropic' }}</button>
+              <p class="login-subtle-note">{{ account.user ? 'Your key is encrypted for this sign-in session and removed when you disconnect or sign out. Choose Anthropic in the simulation provider menu.' : 'Sign in with Google first to connect your key.' }}</p>
+            </form>
+          </section>
+
           <p v-if="message" class="login-error" role="alert"><AppIcon name="alert" :size="17" /><span>{{ message }}</span></p>
 
-          <button v-if="account.user" type="button" class="login-continue-button" :disabled="busy || !university || universityEditing" @click="leave('continue', connected ? 'openai' : 'demo')">Open my workspace <AppIcon name="arrow-right" :size="18" /></button>
+          <button v-if="account.user" type="button" class="login-continue-button" :disabled="busy || !university || universityEditing" @click="leave('continue', preferredMode)">Open my workspace <AppIcon name="arrow-right" :size="18" /></button>
           <p v-if="account.user && (!university || universityEditing)" class="login-subtle-note">Save your university or institution above to open your workspace.</p>
           <p class="login-save-note"><AppIcon name="lock" :size="14" /><span>Work is saved for your Google account in this browser. Other devices have separate saved work.</span></p>
         </template>
@@ -183,41 +246,13 @@ defineExpose({ focusHeading: () => heading.value?.focus(), clearKey });
 </template>
 
 <style scoped>
-/* The login keeps its original palette; workspace styles are independent. */
-.researcher-login {
-  --ui-canvas: #FFFFFF;
-  --ui-surface: #FFFFFF;
-  --ui-surface-alt: #F8FAFC;
-  --ui-text: #1D1D1F;
-  --ui-muted: #5D616B;
-  --ui-accent: #2457D6;
-  --ui-on-accent: #FFFFFF;
-  --ui-border: #E2E7EF;
-  --ui-control-border: #737986;
-  --ui-hover: #F2F6FC;
-  --ui-selected: #EDF3FF;
-  --ui-focus: #2457D6;
-  --ui-shadow: 0 8px 28px #1E3A5F0A;
-  --ui-backdrop: #F0F4FAB8;
-  --ui-warning: #82520E;
-  --ui-warning-bg: #FFF4DF;
-  --ui-danger: #963E30;
-  --ui-danger-bg: #FFF0EA;
-  --ui-info: #285E7A;
-  --ui-info-bg: #EAF4FA;
-  --ui-purple: #6C4785;
-  --ui-purple-bg: #F4EDF9;
-  --green: var(--ui-accent);
-  --muted: var(--ui-muted);
-  --border: var(--ui-border);
-  font-family: var(--font-body);
-}
+.login-appearance { display: flex; justify-content: flex-end; max-width: 1180px; margin: 0 auto 20px; }
 .researcher-login { flex: 1; min-width: 0; min-height: 100dvh; overflow-y: auto; padding: clamp(24px, 5vw, 64px) clamp(16px, 3vw, 40px); background: var(--ui-canvas); color: var(--ui-text); }
 .login-layout { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: clamp(28px, 5vw, 72px); max-width: 1180px; margin: 0 auto; align-items: start; }
 .login-introduction { padding: 20px 0; position: sticky; top: 28px; }
 .login-eyebrow { display: flex; align-items: center; gap: 8px; color: var(--ui-muted); font-size: .75rem; font-weight: 650; letter-spacing: .08em; margin-bottom: 28px; }
 .login-eyebrow > span { height: 6px; width: 6px; border-radius: 50%; background: var(--ui-accent); }
-.login-brand-mark { display: grid; place-items: center; width: 64px; height: 64px; background: var(--ui-surface-alt); color: var(--ui-accent); border: 1px solid var(--ui-border); border-radius: 18px; margin-bottom: 24px; }
+.login-brand-mark { color: var(--ui-text); font-family: var(--font-brand); font-size: 2.4rem; font-weight: 500; margin-bottom: 24px; }
 h1 { color: var(--ui-text); font-size: clamp(1.875rem, 3.1vw, 2.625rem); line-height: 1.16; letter-spacing: -.045em; font-weight: 650; margin: 0 0 20px; max-width: 440px; overflow-wrap: anywhere; }
 h1:focus { outline: none; }
 .login-lead { color: var(--ui-muted); font-size: 1rem; line-height: 1.7; margin: 0 0 32px; max-width: 400px; }
@@ -230,7 +265,7 @@ h1:focus { outline: none; }
 .login-footnote { border-top: 1px solid var(--ui-border); padding-top: 20px; margin-top: 32px; display: flex; align-items: center; gap: 10px; color: var(--ui-muted); font-size: .75rem; line-height: 1.6; }
 .login-setup { min-width: 0; border: 1px solid var(--ui-border); border-radius: 20px; background: var(--ui-surface); padding: clamp(20px, 3vw, 32px); box-shadow: var(--ui-shadow); }
 .login-options { display: grid; gap: 24px; min-width: 0; }
-.login-demo-card { border-color: #C8D8F5; }
+.login-demo-card { border-color: var(--ui-demo-border); }
 .login-option-label { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--ui-accent); font-size: .75rem; font-weight: 600; margin-bottom: 16px; }
 .login-option-number { font-family: var(--font-data); color: var(--ui-muted); margin-right: 2px; }
 .login-fictional-label { margin-left: auto; background: var(--ui-selected); padding: 5px 8px; border-radius: 6px; font-size: .6875rem; }
@@ -300,7 +335,7 @@ form > label { display: block; font-size: .75rem; font-weight: 600; color: var(-
 .login-spinner { width: 18px; height: 18px; border: 2px solid var(--ui-border); border-top-color: var(--ui-accent); border-radius: 50%; animation: login-spin 1s linear infinite; flex-shrink: 0; }
 .researcher-login :is(button, a):focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 3px; }
 @keyframes login-spin { to { transform: rotate(360deg); } }
-@media (max-width: 900px) { .login-layout { display: block; max-width: 560px; } .login-introduction { padding: 0 0 28px; position: static; } .login-eyebrow { margin-bottom: 16px; } .login-brand-mark, .login-benefits, .login-footnote { display: none; } h1 { max-width: none; margin-bottom: 14px; } .login-lead { max-width: none; margin-bottom: 0; } }
+@media (max-width: 900px) { .login-layout { display: block; max-width: 560px; } .login-introduction { padding: 0 0 28px; position: static; } .login-eyebrow { margin-bottom: 16px; } .login-brand-mark { font-size: 2rem; margin-bottom: 20px; } .login-benefits, .login-footnote { display: none; } h1 { max-width: none; margin-bottom: 14px; } .login-lead { max-width: none; margin-bottom: 0; } }
 @media (max-width: 480px) { .researcher-login { padding: 24px 16px; } .login-setup { padding: 24px 20px; border-radius: 16px; } .login-options { gap: 20px; } .login-step-heading { gap: 8px; } .login-step-heading > div { min-width: 0; } .login-status { margin-left: 36px; } .login-text-button { min-height: 44px; } }
 @media (prefers-reduced-motion: reduce) { .login-spinner { animation: none; } .researcher-login * { transition: none; } }
 </style>

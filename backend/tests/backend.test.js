@@ -58,10 +58,31 @@ test('serves the SPA when a build exists', async () => {
 
 test('Express routes institution lookup and transcription through the shared API', async () => {
   await withServer({ serveStatic: false, env: {} }, async (base) => {
-    for (const path of ['/api/institution', '/api/transcribe']) {
+    for (const path of ['/api/institution', '/api/transcribe', '/api/evidence', '/api/anthropic']) {
       const response = await fetch(`${base}${path}`, { method: 'POST' })
       assert.equal(response.status, 503)
       assert.equal((await response.json()).code, 'auth_not_configured')
     }
+  })
+})
+
+test('Express exposes credential-free university preview while preserving account boundaries', async () => {
+  await withServer({ serveStatic: false, env: {} }, async (base) => {
+    const response = await fetch(`${base}/api/institution-preview`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base },
+      body: JSON.stringify({ university: 'harvard' }),
+    })
+    assert.equal(response.status, 200)
+    const preview = await response.json()
+    assert.equal(preview.profile.university.id, 'harvard')
+    assert.equal(preview.profile.status, 'composite')
+    assert.equal(preview.token, undefined)
+    assert.equal(response.headers.get('cache-control'), 'no-store')
+    assert.equal((await fetch(`${base}/api/institution-preview`)).status, 405)
+    const forbidden = await fetch(`${base}/api/institution-preview`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'https://attacker.example' },
+      body: JSON.stringify({ university: 'harvard' }),
+    })
+    assert.equal(forbidden.status, 403)
   })
 })

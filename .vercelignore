@@ -14,3 +14,15 @@
 /.env.*
 /frontend/.env
 /frontend/.env.*
+
+# Machine-local artifacts and unrelated research deliverables.
+/.venv
+/vendor
+/web/node_modules
+/data/raw
+/exports
+/docs
+/HACKATHON_PROJECT_STATE.md
+/judge-background-research.md
+/server/__pycache__
+/server/*.db

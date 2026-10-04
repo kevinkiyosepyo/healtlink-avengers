@@ -7,3 +7,4 @@ Recurring corrections in this repo. Read before running the skill; add one line 
 - 2026-10-03 · localStorage read/write try/catch repeated per component → `lib/storage.js`.
 - 2026-10-03 · async components each needing an error state → one `lazy()` helper in `App.vue`.
 - 2026-10-03 · divergent workspace entrypoints shared incompatible graph/style files → keep their page components and styles separate, share compatible state/API helpers, and verify both routes.
+- 2026-10-04 · appearance controls navigated between separate applications → keep one workspace and shared theme tokens; verify graph selection, playback, and draft inputs survive the switch.

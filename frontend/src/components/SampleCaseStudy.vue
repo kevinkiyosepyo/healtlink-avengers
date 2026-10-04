@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import AppIcon from './AppIcon.vue';
 import { getSampleCaseComparison, SAMPLE_CASE_START, SAMPLE_CASE_ROTATION_END } from '../lib/sampleCaseStudy.js';
+import { SAMPLE_AGENT_COUNT, SAMPLE_ROLE_COUNT, SAMPLE_REVIEW_LENSES } from '../lib/sampleCaseGraph.js';
 
 const emit = defineEmits(['navigate']);
 const heading = ref(null);
@@ -31,6 +32,12 @@ defineExpose({ focusHeading: () => heading.value?.focus() });
         <div class="case-profile-dates"><AppIcon name="calendar" :size="17" /><span><time :datetime="SAMPLE_CASE_START">{{ dateLabel(SAMPLE_CASE_START) }}</time>–<time :datetime="SAMPLE_CASE_ROTATION_END">{{ dateLabel(SAMPLE_CASE_ROTATION_END) }}, 2026</time> · 12 hours/week</span></div>
       </section>
       <p class="case-goal"><strong>The goal</strong> Be ready for the first authorized data-quality task.</p>
+
+      <section class="case-reviewers" aria-labelledby="case-reviewers-heading">
+        <h2 id="case-reviewers-heading">Simulated IRB board members are part of the review.</h2>
+        <p>Scientific, nonscientific, community, and privacy-focused IRB personas examine training evidence, role boundaries, and access conditions alongside research teams and participant perspectives.</p>
+        <p>The {{ SAMPLE_AGENT_COUNT }} scripted agents represent {{ SAMPLE_ROLE_COUNT }} fictional roles × {{ SAMPLE_REVIEW_LENSES.length }} review lenses: {{ SAMPLE_REVIEW_LENSES.map(lens => lens.label.toLowerCase()).join(', ') }}. They explore this invented case; they do not vote or issue an institutional approval.</p>
+      </section>
 
       <section class="case-comparison" aria-labelledby="case-comparison-heading">
         <div class="case-section-heading">
@@ -97,6 +104,8 @@ h1:focus { outline: none; }
 .case-profile-dates svg { color: var(--ui-accent); }
 .case-goal { margin: 15px 0 32px; color: var(--ui-muted); }
 .case-goal strong { margin-right: 10px; color: var(--ui-text); font-weight: 600; }
+.case-reviewers { margin-bottom: 32px; border-left: 3px solid var(--ui-accent); padding: 0 0 0 20px; }
+.case-reviewers p { margin: 8px 0 0; color: var(--ui-muted); font-size: .8125rem; }
 h2 { margin: 0 0 8px; font-family: var(--font-display); font-size: clamp(1.5rem, 2.4vw, 2rem); font-weight: 400; letter-spacing: -.025em; line-height: 1.25; }
 .case-section-heading > p { margin: 0 0 20px; color: var(--ui-muted); }
 .case-plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }

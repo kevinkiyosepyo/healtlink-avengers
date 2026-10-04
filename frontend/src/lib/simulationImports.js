@@ -5,6 +5,7 @@ export const IMPORT_LIMITS = Object.freeze({
   transcriptChars: 40000, contextChars: 120000,
   fileBytes: 15 * 1024 * 1024, expandedBytes: 30 * 1024 * 1024,
 })
+export const SIMULATION_IMPORT_ACCEPT = '.pdf,.md,.markdown,.txt,.zip,application/pdf,text/plain,text/markdown,application/zip,application/x-zip-compressed'
 const supported = new Set(['pdf', 'md', 'markdown', 'txt'])
 const utf8 = new TextDecoder('utf-8', { fatal: true })
 const extension = name => name.toLowerCase().split('.').pop()
@@ -122,7 +123,7 @@ export async function extractPdfText(bytes) {
   } finally { await loading.destroy() }
 }
 
-export async function importSimulationFile(file, { pdfReader = extractPdfText, id = () => globalThis.crypto.randomUUID() } = {}) {
+export async function importSimulationFile(file, { pdfReader = extractPdfText, id = () => globalThis.crypto.randomUUID(), documentChars = IMPORT_LIMITS.documentChars } = {}) {
   if (!file || typeof file.name !== 'string' || !Number.isFinite(file.size)) failure('Choose a valid file.')
   if (file.size > IMPORT_LIMITS.fileBytes) failure(`${file.name} exceeds the 15 MB file limit.`)
   if (file.size === 0) failure(`${file.name} is empty.`)
@@ -166,7 +167,7 @@ export async function importSimulationFile(file, { pdfReader = extractPdfText, i
       if (text.includes('\u0000')) failure(`${input.name} appears to contain binary data.`)
     }
     if (!text.trim()) failure(`${input.name} contains no readable text.`)
-    if (text.length > IMPORT_LIMITS.documentChars) failure(`${input.name} exceeds 40,000 characters. Import a shorter excerpt.`)
+    if (text.length > documentChars) failure(`${input.name} exceeds ${documentChars.toLocaleString('en-US')} characters. Import a shorter excerpt.`)
     documents.push({ id: id(), name: input.name, kind, text })
   }
   return documents

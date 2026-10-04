@@ -7,6 +7,8 @@ const props = defineProps({
   university: { type: Object, default: null },
   error: { type: String, default: '' },
   disabled: { type: Boolean, default: false },
+  saveLabel: { type: String, default: 'Save university' },
+  saveNote: { type: String, default: '' },
 })
 const emit = defineEmits(['save', 'editing'])
 const editing = ref(!props.university)
@@ -115,7 +117,7 @@ function save() {
   <section class="university-step" aria-labelledby="university-step-title">
     <div class="university-heading">
       <span class="university-step-icon"><AppIcon :name="university ? 'check' : 'people'" :size="15" /></span>
-      <div><h3 id="university-step-title">Your university</h3><p>Which university or institution is your research with?</p></div>
+      <div><h3 id="university-step-title">What university are you part of?</h3><p>We’ll find public IRB members and guidance for your institution.</p></div>
     </div>
 
     <div v-if="university && !editing" class="university-selected">
@@ -149,12 +151,12 @@ function save() {
       <p id="university-note" class="university-note">Select a match, add an institution, or choose independent researcher. You can change this later.</p>
       <p v-if="localError" class="university-error" role="alert">{{ localError }}</p>
       <div class="university-actions">
-        <button type="submit" class="university-save" :disabled="disabled || !selection">Save university</button>
+        <button type="submit" class="university-save" :disabled="disabled || !selection">{{ saveLabel }}</button>
         <button v-if="university" type="button" :disabled="disabled" @click="cancel">Cancel</button>
       </div>
     </form>
     <p v-if="error" class="university-error" role="status">{{ error }}</p>
-    <p v-if="!error" class="university-note">{{ university ? 'Saved for your Google account in this browser.' : 'Your choice will be saved for your Google account in this browser.' }}</p>
+    <p v-if="!error" class="university-note">{{ saveNote || (university ? 'Saved for your Google account in this browser.' : 'Your choice will be saved for your Google account in this browser.') }}</p>
   </section>
 </template>
 

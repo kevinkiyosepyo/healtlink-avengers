@@ -46,7 +46,7 @@ function fetchPinned(url, address, signal, requestImpl) {
       signal,
       agent: false,
       // No cookie, Authorization, or researcher content is sent to university sites.
-      headers: { Accept: "text/html,application/pdf,text/plain;q=0.8", "Accept-Encoding": "identity", "User-Agent": "Microfish-Research-Preview/1.0" },
+      headers: { Accept: "text/html,application/pdf,text/plain;q=0.8", "Accept-Encoding": "identity", "User-Agent": "Lookahead-Research-Preview/1.0" },
       lookup: (_hostname, options, callback) => {
         if (options.all) callback(null, [{ address, family: 4 }]);
         else callback(null, address, 4);

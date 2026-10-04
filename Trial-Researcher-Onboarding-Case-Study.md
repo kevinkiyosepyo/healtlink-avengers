@@ -1,25 +1,50 @@
-# Trial Researcher: The Student Who Could Have Started Two Weeks Earlier
+# Lookahead: The Student Who Could Have Started Two Weeks Earlier
 
-**Detailed fictional onboarding case and simulation blueprint**<br>
-**Prepared:** October 3, 2026<br>
-**Working product:** Trial Researcher<br>
+**Detailed fictional onboarding case and simulation blueprint**\
+**Prepared:** October 3, 2026\
+**Expanded for clarity:** October 4, 2026
+**Working product:** Lookahead\
 **Hackathon connection:** Track 2 — AI-Powered Clinical Trials
 
-> **Fictional demonstration.** Every institution, character, study, procedural requirement, processing time, dialogue, and numerical outcome in this scenario is invented. The timeline was constructed to illustrate a two-week improvement; it is not a measured product result or a forecast for an actual lab. Public policy references are identified separately.
+> **Fictional demonstration.** Every institution, character, study, procedural requirement, processing time, dialogue, and numerical outcome in this scenario is invented. The timeline was constructed to illustrate a two-week improvement; it is not a measured product result, an account of a real person's onboarding, or a forecast for an actual lab.
 
-## 1. The story in one paragraph
+## 1. The problem, in plain language
 
-Alex is a third-year data-science student joining an existing clinical research team for a six-week rotation. Alex has sent training certificates and assumes the next step is to wait for permission to access the study workspace. However, the packet does not demonstrate one required training component, the coordinator discovers that problem only after intake, and the lab postpones all technical setup until after authorization. With the original sequence, Alex becomes ready for the assigned data task on **November 2**. Trial Researcher rehearses the workflow on the first day, identifies the missing evidence, and finds that an empty workspace can be prepared while the complete personnel submission is reviewed. With those changes, Alex becomes ready on **October 19: exactly 14 calendar days earlier** in this illustrative calendar.
+**The lab thought Alex's onboarding paperwork was ready because certificates had arrived. The reviewer needed proof that the right training was complete and that the requested access matched Alex's actual job. Those are different checks.**
 
-The same human authorities make the decisions, and the complete submission takes the same amount of review time in both versions. The benefit comes from making hidden dependencies visible before they become delays.
+Alex is a third-year data-science student joining an existing clinical research team for six weeks. The job is simple: read an approved extract of wearable and questionnaire data and flag missing records. Alex does not need participant names, contact details, or permission to change study records.
 
-## 2. The scenario question
+The lab submits two course certificates, a vague role description, and a reused request for full study-workspace access. The required human-subjects course is still partly incomplete. Nobody checks that exact requirement against the attached records before submission.
 
-**What if a student could rehearse the next month of onboarding before spending it waiting?**
+Three working days later, the fictional review office returns **Alex's personnel addition for correction**. It cannot confirm the required training or reconcile a narrow analysis job with broad access. The underlying trial remains approved; Alex's addition has not yet met this study's requirements.
 
-The scenario combines a training-evidence mismatch, a personnel-modification process, a technical preparation queue, and a six-week rotation. These are explicit modeling assumptions rather than findings about any real person's onboarding.
+A two-hour training task then becomes four working days of email, verification, PI confirmation, and resubmission. Once the complete packet is accepted and local clearance is finished, the lab discovers that the computer environment still needs three days of preparation.
 
-> **Product demonstration:** “We built a fictional onboarding scenario to show how a simulation could reveal two weeks of avoidable delay.”
+Lookahead would have surfaced both problems on the first morning: finish and verify the outstanding requirement before submitting; describe the limited role accurately; prepare the empty environment while review proceeds. Under the stated assumptions, the student becomes ready on **October 19 instead of November 2—exactly two calendar weeks earlier**.
+
+### The three mistakes a reader should remember
+
+| What the team assumed | What was actually true in the fictional case | What checking earlier would change |
+|---|---|---|
+| “Alex sent certificates, so the training requirement is done.” | Two completed courses did not establish completion of the third required course. | Match each required course to its completion record before submission. |
+| “Research assistant” and “full access” are sufficient descriptions. | Alex's narrow task did not require the broad access requested by the template. | State the actual duties and request the corresponding limited role. |
+| “Everything involving the workspace must wait for clearance.” | Empty-environment setup was allowed earlier; production data activation had to wait. | Split the task and run permitted preparation during review. |
+
+The first two mistakes are corrected together in **one** returned-packet cycle. They do not each generate a separate seven-day saving. The third mistake adds a separate three-day scheduling delay.
+
+### What “rejected” means here
+
+In casual conversation, Alex might say, “The IRB rejected my onboarding.” The precise scenario status is **“Personnel addition returned for revisions.”** The office needs a corrected submission before completing this personnel review. That distinction helps the student identify a fixable next action instead of interpreting the notice as rejection of the trial or of their ability to do research.
+
+## 2. How to read this fictional example
+
+The case illustrates a general coordination problem: receiving documents, verifying requirements, obtaining permission, and enabling access are distinct milestones. A team can complete one without completing the others.
+
+The training-evidence mismatch, personnel-modification process, technical preparation queue, and six-week rotation are invented scenario inputs. They are not allegations about an actual student, institution, supervisor, or review office.
+
+For a presentation, describe the demonstration accurately:
+
+> “We built a fictional onboarding scenario to show how checking evidence and changing task order could reveal two weeks of avoidable delay under explicit assumptions.”
 
 ## 3. The fictional study and people
 
@@ -52,7 +77,7 @@ The rotation begins **Monday, October 5, 2026** and ends at the start of **Monda
 
 For this example, assume the fictional coordinator has confirmed these local requirements:
 
-1. The personnel packet needs applicable human-subjects training evidence, a study-role description, an affiliation record, a data-handling acknowledgment, and PI confirmation.
+1. The personnel packet needs verified RCR, Privacy Awareness, and HS-02 completion records, a specific study-role description aligned with the requested access, an affiliation record, a data-handling acknowledgment, and PI confirmation. HS-02 is this fictional institution's Human Subjects Research — Student Data Analyst course.
 2. This study requires a recorded personnel-modification decision before it releases data to Alex. Complete-packet review takes **five working days**, including normal intake.
 3. An incomplete submission is returned after **three working days** of initial screening. Correcting the evidence and coordinating resubmission takes **four additional working days** in the baseline case.
 4. After the decision, local release checks take **two working days**. Study-specific orientation and role documentation are completed within this stage in both versions.
@@ -66,110 +91,212 @@ These are scenario parameters, not universal IRB requirements or promised proces
 
 A training-related return is a realistic type of administrative dependency: NIH's modification instructions state that missing or outdated required training in its system can cause a study-team modification to be returned. This supports the mechanism, not the fictional dates or policy. [NIH IRBO: Protocol Modifications](https://irbo.nih.gov/conducting-your-study/protocol-modifications/)
 
-## 5. Version A: onboarding without the rehearsal
+## 5. Version A: how an understandable mistake becomes a month of onboarding
 
-### October 5–7: the packet looks ready
+### October 5: Alex thinks the documents are already enough
 
-On the first morning, Alex emails two certificates and an introduction. One course documents general research conduct; the other documents privacy awareness. The fictional local matrix also requires a particular human-subjects component, **HS-02**, which the attachments do not demonstrate.
+Alex starts the rotation expecting to help with the study's weekly data-quality report. The mentor says:
 
-The shared checklist has a field labeled “Training certificates received.” Jordan checks it. That accurately describes receipt, but the team treats the checkmark as verification that the requirement is satisfied.
+> “We want you to check which participant-days are missing wearable files and which weekly questionnaires haven't arrived. You will work with the coded analysis extract in our research environment.”
 
-Alex asks how to enter the analysis workspace. Jordan says access will be arranged after the personnel process. Nobody separates empty-environment preparation from activation of the study-data role.
+Alex sends two certificates with this message:
 
-The PI confirms the proposed responsibilities, and Jordan submits the packet on October 7. A submission receipt exists; this example is not relying on a draft being mistaken for an actual submission.
+> “Here are my research-conduct and privacy certificates. I've also worked through most of the human-subjects course. Please let me know when I can enter the workspace.”
 
-### October 7–12: the first hidden delay
+That email contains an important ambiguity. **“Most of the course” is not “course completed.”** In the invented course record, Alex has two remaining modules and the completion assessment, together expected to take about two hours. This is remaining work in a partly completed fictional course, not an estimate for completing an entire real training curriculum.
 
-On October 12, the review office returns the packet with an invented deficiency notice:
+Jordan sees the two PDFs, adds them to the onboarding folder, and checks “Training certificates received.” Alex sees the checkmark and assumes the lab has verified everything required. Jordan assumes the attachments are the standard documents students usually send.
 
-> “Please supply evidence satisfying training requirement HS-02 and ensure that the personnel-role description matches the requested data access.”
+Nobody has behaved maliciously. The checklist has allowed three different things—receipt, relevance, and completion—to collapse into one green status.
 
-This is a request to correct an incomplete packet, not a finding that the trial is unethical or a rejection of Alex as a researcher.
+### October 6: the packet acquires a second ambiguity
 
-Alex had interpreted “I sent my certificates” as completion. Jordan had interpreted the checkmark similarly. The discrepancy becomes visible only after three working days have passed.
+The team uses an old personnel-addition template. Its role field says:
 
-### October 12–16: a small task becomes a long handoff
+> **Role:** Research assistant.\
+> **Responsibilities:** Help with study data and other research tasks as needed.
 
-The correction consumes four working days of elapsed time:
+The attached access request selects:
 
-- One day to identify the exact missing component and reconcile the checklist with the training matrix.
-- One day before Alex's next available study block, when the component and evidence upload are completed.
-- One day for coordinator verification and clarification of the role description.
-- One day for PI confirmation and resubmission through the normal handoff process.
+> **Requested role:** Study staff — full workspace read/write access.
 
-The active training work is assumed to take about two hours. The four days mostly reflect waiting and coordination, not four days of coursework. With the requirements visible and work blocks reserved, this work could fit inside the original two-day preparation window.
+In this fictional workspace, that role includes the participant contact/linkage area and editing privileges. Those are useful for some staff members, but Alex's assigned task needs only a read-only coded analysis extract.
 
-Jordan resubmits the complete packet on October 16.
+The PI agrees Alex should join the team. The coordinator treats that agreement as sufficient to move the packet forward. Neither compares the generic form language with the particular access request.
 
-### October 16–23: the complete submission is reviewed
+### October 7: what the review office actually receives
 
-The packet takes the assumed five working days to review and is accepted October 23. This example assumes an office-level personnel-modification workflow. It does not invent a full-board meeting or assign decision authority to AI personas.
-
-Alex sees that the modification is approved and expects immediate access. Another dependency is about to become visible.
-
-### October 23–27: local release checks
-
-The data steward checks the decision, role, training, orientation record, and permitted data scope. These checks take two working days in the scenario.
-
-The authorization conditions are now satisfied. The computer environment is still unprepared.
-
-### October 27–30: a second queue begins
-
-The team opens the computing request. Sam confirms identity setup, configures MFA, creates an empty analysis environment, installs packages, and runs a fabricated-data notebook.
-
-These tasks take three working days. They did not require access to the real study extract, but the checklist placed everything under a single item: “Get access.”
-
-### October 30–November 2: finally ready
-
-Sam activates the authorized study role, confirms the intended folder is reachable, and verifies with Alex that the notebook runs in the permitted environment. This final step takes one working day.
-
-**Alex becomes ready on November 2, four calendar weeks after onboarding began. Two weeks remain in the rotation.**
-
-## 6. What Trial Researcher sees on the first morning
-
-The demo supplies six small, entirely fictional inputs:
-
-| Input | Relevant content | What the product extracts |
+| Packet item | Exact fictional contents | What it proves—and what it leaves unresolved |
 |---|---|---|
-| Onboarding SOP v3 | Required documents and responsible people | Tasks, owners, supporting passages |
-| Training matrix | HS-02 requirement for Alex's role | Exact evidence to verify |
-| Two course records | Course titles, dates, completion status | What the submitted records actually establish |
-| Role description | Supervised data-quality work; no participant contact | Relevant permissions and preparation tasks |
-| Computing policy §4.2 | Empty environments may be prepared before final clearance | A permitted parallel branch |
-| Rotation and availability plan | Six-week window, 12 hours/week, mentor work blocks | Calendar constraints and impact of delay |
+| `Alex_RCR_Completion.pdf` | “Responsible Conduct of Research,” completed Sept 18 | Establishes that course's completion; does not establish HS-02 completion |
+| `Alex_Privacy_Completion.pdf` | “Research Privacy Awareness,” completed Sept 22 | Establishes privacy-course completion; does not establish HS-02 completion |
+| Human-subjects completion record | No completed record attached | Required HS-02 remains unsupported |
+| Training field in the personnel form | “All required training complete: Yes” | An assertion inconsistent with the supplied evidence |
+| Personnel role description | “Research assistant; help with study data and other tasks” | Does not specify Alex's limited responsibilities |
+| Access request | “Study staff — full workspace read/write” | Requests a wider scope than the mentor's stated assignment needs |
+| Affiliation and handling acknowledgment | Supplied and current | These parts of the fictional packet are complete |
 
-The simulation needs workflow information. It does not need participant records to calculate this case.
+The packet is submitted October 7. The team has a receipt. The problem is the packet's contents, rather than a failure to press Submit.
 
-### Finding 1: receipt is being confused with verification
+### Why the reviewer cannot clear this packet as written
 
-The training comparison surfaces:
+Cedar Bay's invented local review process asks two practical questions about each new team member:
 
-> “Two certificates are present. Neither supplied record establishes HS-02 completion. Ask the coordinator whether equivalent evidence exists; if it does not, complete the missing requirement before submission.”
+1. **Can the required preparation be verified?** The policy calls for HS-02, “Human Subjects Research — Student Data Analyst.” The two PDFs document other courses. The reviewer cannot turn those records into evidence of HS-02 completion simply because they are research-related certificates.
+2. **Can the responsibilities and access be reconciled?** The application needs to establish what Alex will do and which study information the role requires. “Other tasks as needed” does not resolve whether Alex will contact participants, view the identity key, or edit records. The selected full-access role leaves that uncertainty material.
 
-Missing evidence is not proof of missing training. In this invented case, Jordan confirms the component remains outstanding. Only then does the model use the correction branch.
+The fictional HS-02 requirement exists because Alex will handle restricted research information about participants. The invented curriculum covers responsibilities for permitted research use, handling participant information, and reporting a suspected disclosure. General research-conduct and privacy-awareness courses address related topics, but the fictional policy does not treat them as automatic substitutes.
 
-### Finding 2: technical preparation is unnecessarily sequential
+The scope concern has a similarly concrete rationale: granting the generic role would expose information and privileges unrelated to Alex's assignment. The reviewer needs the PI to confirm a specific role and the packet to request a corresponding scope. This is a feature of this scenario's local process, not a claim that every IRB directly manages computer permissions.
 
-The workflow analysis surfaces:
+### October 12: the fictional return notice
 
-> “The checklist places all computing work after clearance. Computing Policy §4.2 permits empty-environment preparation earlier. Split preparation from production activation.”
+> **Study:** REST-101, personnel modification PM-014\
+> **Status:** Returned for revisions — personnel addition incomplete\
+> **Existing study status:** Approved; unchanged by this notice
+>
+> **1. Required training evidence:** The form states that all required training is complete. The attached records establish RCR and Privacy Awareness completion, but no record establishes HS-02 completion. Supply the applicable completion record, or provide an accepted-equivalency determination under the local training policy.
+>
+> **2. Role and access clarification:** Describe the proposed team member's actual duties. Confirm whether participant contact, identity-linking information, or record modification is required. Align the access request with the confirmed responsibilities.
+>
+> **Next action:** Correct these items, obtain PI confirmation of the revised role, and resubmit the personnel packet. Under this study's local rules, Alex's production data access remains pending until the personnel decision and release checks are complete.
 
-This creates a parallel path without granting study-data access early. In the demo, move the preparation block underneath the review lane and recalculate the completion date.
+In ordinary language, the reviewer is saying:
 
-### Finding 3: one broad status hides several milestones
+> **“We cannot verify the required training from these documents, and we cannot tell why this student needs the broad access requested. Give us the missing evidence and a clear, matching role description.”**
 
-Replace “Waiting for IRB” with separately evidenced states:
+The reviewer is not asking the team to redesign the intervention, collect new efficacy evidence, or repeat the study's original approval. The unresolved item is the addition of one person under this fictional local process.
 
-1. Packet complete and ready to submit.
-2. Submission receipt recorded.
-3. Review response pending.
-4. Decision recorded.
-5. Local release checks complete.
-6. Empty environment ready.
-7. Production role activated and tested.
-8. First authorized task ready.
+### The student's experience of the delay
 
-A scenario date is a planning output. It does not mark a real requirement complete or substitute for its supporting evidence.
+Alex receives a short forwarded message: “IRB sent this back; we'll sort it out.” Without the full context, Alex does not know whether the study has been stopped, whether all training must be repeated, or whether they should keep waiting.
+
+The confusion is operational. Alex needs a specific task—finish the remaining HS-02 work and supply the resulting record. Jordan needs a specific task—verify it and revise the role/access pair. The PI needs a specific confirmation. A broad “waiting for IRB” label hides those owners and actions.
+
+### October 12–16: why two hours become four working days
+
+| Date | What actually happens in the baseline | Why the packet still cannot move forward |
+|---|---|---|
+| Mon, Oct 12 | Jordan reads the notice, identifies HS-02 in the local matrix, and asks Alex about completion. Alex confirms the course is unfinished. | The exact deficiency is now understood, but evidence is still absent. |
+| Tue, Oct 13 | Alex uses the next available block to finish the remaining modules and assessment, then sends the completion record. | Jordan still needs to verify the record and correct the role information. |
+| Wed, Oct 14 | Jordan verifies the matching course and records the specific analysis duties. The access request changes to the limited analysis role. | The corrected personnel description needs PI confirmation. |
+| Thu, Oct 15 | Dr. Chen confirms the revised duties and access scope in the available signoff slot. Jordan assembles the final response. | The team resubmits at its next scheduled processing point. |
+| Fri, Oct 16 | Jordan resubmits the corrected packet at the start of the working day. | The complete-packet review can now proceed. |
+
+October 12 to October 16 is four working days under the boundary convention. The table includes the completion event on October 16; it does not count five additional days.
+
+The delay is the sum of real handoffs in the fictional schedule. Finishing a course does not automatically verify the evidence, edit the application, obtain confirmation, and resubmit it. Each of those actions needs an owner.
+
+Both deficiencies are resolved in this single cycle. The model does not add another correction period for the access issue.
+
+### October 16–23: the complete-packet review
+
+The corrected submission now answers the two questions. Its role statement reads:
+
+> “Alex will perform supervised data-quality checks on the approved coded analysis extract. Alex will identify missing files and inconsistent labels and submit a quality report to the mentor. Alex will not contact participants, obtain consent, access the identity-linking key, or modify source study records.”
+
+Its access request reads:
+
+> “Read-only access to the approved coded analysis extract in the lab-managed environment. No access to participant contact/linkage files or write access to source study records.”
+
+The matching HS-02 completion record is attached and verified. The review office processes this complete packet in the assumed five working days, including its normal intake, and records acceptance on October 23.
+
+The first incomplete submission's screening did not replace any part of this assumed five-day complete-packet service period. That is an explicit scheduling assumption behind the seven-day avoidable cycle, rather than a universal rule that every correction restarts an IRB clock.
+
+### October 23–27: permission is established, but readiness is still incomplete
+
+The local data steward confirms the recorded personnel decision, verified training, approved role, orientation record, and limited access request. These checks take the same two working days in both plans.
+
+At October 27, the required authorization path is complete. Alex still has no working environment.
+
+### October 27–30: why “approved” does not mean “able to start”
+
+The old checklist reads:
+
+> **After clearance:** arrange the account, workspace, packages, and data access.
+
+Sam receives the first computing request October 27. Sam needs to prepare identity setup, MFA, the empty workspace, packages, and a test notebook. The queue and setup take three working days.
+
+Jordan asks whether any of that could have been started sooner. Sam points to the supplied fictional Computing Policy §4.2:
+
+> “A sponsored researcher may prepare a separate empty analysis environment and test it using fabricated records while study authorization is pending. Production study folders and the study-data role must remain unavailable until release conditions are confirmed.”
+
+The team had turned an appropriate restriction on **data access** into an unnecessary restriction on **all preparation**.
+
+### October 30–November 2: the final activation
+
+Sam activates only the limited role that has been authorized. Alex and Sam confirm the coded extract is reachable, restricted areas remain unavailable, and the notebook runs in the correct environment. This final verification takes one working day.
+
+**Alex becomes ready for the assigned task on November 2.** Four weeks of the six-week rotation have elapsed. Alex could learn and practice during that time, but had only two weeks left to do the actual authorized assignment.
+
+## 6. What checking on day one would reveal
+
+Lookahead needs the actual local requirements and workflow evidence. For the demonstration, all of the following inputs are fabricated:
+
+| Input | Important information | Why the app needs it |
+|---|---|---|
+| Onboarding SOP v3 | Required documents, submission owner, confirmation steps | Defines the process rather than guessing it |
+| Training matrix | RCR, Privacy Awareness, and HS-02 required for this role | Lets the app compare exact requirements with exact records |
+| Two completed course records | RCR and Privacy Awareness course names and dates | Establishes only those completions |
+| Personnel form draft | “All training complete: Yes”; generic duties | Reveals the unsupported status and ambiguous role |
+| Access request and mentor task note | Full workspace requested; narrow analysis assignment intended | Makes the scope mismatch visible |
+| Computing Policy §4.2 | Empty preparation may precede release; production access may not | Establishes which dependency can be changed |
+| Rotation and availability plan | Six-week window and specific available work blocks | Determines whether an earlier correction is actually feasible |
+
+### Check 1: match requirements to evidence, one by one
+
+| Required evidence under fictional local policy | Evidence supplied at the start | Correct app status |
+|---|---|---|
+| RCR completion | Matching completed-course record | Satisfied after verification |
+| Privacy Awareness completion | Matching completed-course record | Satisfied after verification |
+| HS-02 completion | No completion record | Needs confirmation; not established |
+
+The app should initially say:
+
+> “The packet's 'all training complete' field is not supported by the records supplied. HS-02 has no matching completion record. Ask Alex or Jordan whether a completed or accepted equivalent record exists.”
+
+This is the important evidence boundary: **no record supplied** does not, by itself, prove **training never completed**. Jordan's fictional follow-up establishes that Alex has about two hours left. The scenario then gains a concrete remedial task.
+
+The early check is not “do more paperwork.” It is “complete this particular remaining work, generate this particular record, and have this particular person verify it before October 7.”
+
+### Check 2: compare what the person will do with what the packet requests
+
+| Field | Current draft | Clarified version |
+|---|---|---|
+| Duties | Help with study data and other tasks | Supervised missing-file, label, and questionnaire-completeness checks |
+| Needed information | Not specified | Approved coded analysis extract |
+| Participant contact or identity key | Unclear | Not part of the assignment |
+| Source-record editing | Full read/write role requested | Not part of the assignment |
+| Requested workspace role | Full study staff | Read-only analysis role scoped to the extract |
+
+The finding is:
+
+> “The access request is broader than the supplied task description supports. Confirm the intended duties with the PI and align both documents before submitting. The app proposes the limited role for confirmation; it does not authorize that role.”
+
+This resolves a predictable reviewer question while the team is already preparing the packet. It shares the same preparation and correction windows as the training issue; its effect is not counted as a separate block of saved time.
+
+### Check 3: split the overloaded access task
+
+| Task inside the old 'Get access' item | Must wait for release in this scenario? | Correct prerequisite |
+|---|---|---|
+| Verify identity and arrange MFA | No | Initial sponsorship and accepted request |
+| Create a separate empty environment | No | Initial sponsorship and accepted request |
+| Install packages and test fabricated records | No | Empty environment available |
+| Activate the production study-data role | Yes | Personnel decision, local release checks, and environment readiness |
+| Verify actual scoped data access | Yes | Authorized activation |
+
+The app now has two branches it can schedule accurately: a review/release branch and a technical-preparation branch. It does not move the production-data gate earlier by removing a requirement.
+
+### Check 4: replace one confusing status with an answer
+
+Instead of “Waiting for IRB,” the initial dashboard could read:
+
+> **Current blocker:** The personnel packet does not yet establish HS-02 completion, and the role/access pair needs clarification.\
+> **Next owner:** Alex completes the remaining work; Jordan verifies the record and updates the packet; Dr. Chen confirms the role.\
+> **Useful parallel work:** Prepare the separately scoped empty environment once sponsorship and request details are ready.\
+> **Later gate:** Production study data remains pending until the recorded decision and local release checks.
+
+This is the kind of clarity the student lacked. It distinguishes an action the team can take now from a genuine external wait.
 
 ## 7. The personalized agents
 
@@ -180,6 +307,8 @@ A scenario date is a planning output. It does not mark a real requirement comple
 **Example output:**
 
 > “HS-02 evidence is unresolved. Do not model the packet as complete until Jordan verifies equivalent evidence or records completion. The role description should also specify that Alex will not recruit participants or access the identity key.”
+
+The explanation should name the specific discrepancy: RCR and Privacy Awareness records are present, but HS-02 completion is not established. The reused full-access request also contradicts the limited assignment described by the mentor. These are the questions the fictional reviewer would ask of this packet.
 
 The agent produces a requirement-to-evidence table, source references, missing items, and the person who can resolve them.
 
@@ -209,33 +338,64 @@ The broader product can include an ethics-review persona that asks whether acces
 
 For this onboarding case, its useful output is an evidence-linked concern or a review question. A simulated opinion cannot establish actual approval. The central demonstration should be the consequences of unresolved requirements and task sequencing.
 
-## 8. Version B: onboarding after the rehearsal
+## 8. Version B: the same people, with a clear plan from the beginning
 
-### October 5–7: prepare the complete packet
+### October 5: discover the problem while there is still time to fix it
 
-On day zero, Alex and Jordan review the extracted requirements. Jordan confirms HS-02 is outstanding. Alex completes the assumed two-hour component during a reserved block, uploads the evidence, and reviews the study's data-handling expectations.
+The day-one rehearsal finds the unsupported training field and the mismatch between Alex's job and the access template. Jordan confirms that HS-02 is unfinished and that the proposed work is limited data-quality analysis.
 
-Jordan checks the exact records against the local matrix, confirms the limited role, and obtains PI confirmation in the scheduled slot. The complete packet is submitted October 7.
+Known available slots make the plan feasible:
 
-Both versions begin on the same date and use the same initial two-day preparation window. The improved version does not hide two weeks of work before the modeled start. It explicitly assumes that the required work fits into those first two days with timely coordination.
+| Available slot in the fictional calendar | Work scheduled with foresight | Approximate active effort |
+|---|---|---:|
+| Monday, Oct 5, student preparation block | Finish the remaining HS-02 modules/assessment and supply the resulting record | 2 hours |
+| Tuesday, Oct 6, coordinator review slot | Verify evidence, write the specific duties, align the access request | 30 minutes |
+| Tuesday, Oct 6, PI confirmation slot | Confirm the limited role and revised request | 15 minutes |
+| Wednesday, Oct 7, submission point | Submit the complete packet and record its receipt | 15 minutes of coordinator effort |
 
-### October 7–14: review and preparation overlap
+These are available work blocks in the fixture, not appointments the AI can magically create. The baseline uses the same initial window for collecting files and a generic role confirmation, but fails to use it for checking the exact requirement and scope. If those slots were unavailable or the outstanding course work took longer, the app would need to move the forecast.
 
-The complete submission undergoes the same five-working-day review.
+### October 6: the student gets a precise answer
 
-Meanwhile, Sam prepares the empty environment. That three-day branch finishes October 12. Alex can practice the notebook with fabricated records while real study data remains unavailable.
+Instead of “Wait until the IRB lets you in,” Jordan can tell Alex:
 
-The product displays two concurrent lanes: environment ready and study-data authorization pending.
+> “Your RCR and privacy records are verified. Your HS-02 record is now complete and verified too. Your assigned role is read-only analysis of the coded extract. The PI has confirmed that scope. We will submit tomorrow. Your real data access stays pending, but we can prepare the separate empty environment during review.”
 
-### October 14–16: complete the release checks
+Alex knows what has been finished, what remains external, and what work is available meanwhile.
 
-The review decision is recorded October 14. The data steward completes the same two-day checks, orientation, and role-record confirmation used in the baseline.
+### October 7: submit a packet the reviewer can understand
 
-### October 16–19: activate and verify
+The complete submission contains the matching records, the precise role description, and the limited access request. It addresses the two concrete questions that caused the original return.
 
-Both prerequisite branches are complete. Sam performs the same one-day production activation and access test.
+This does not promise approval of every corrected real submission. It means the configured reasons for a return are removed in this fictional comparison. The model assumes no further deficiencies appear and applies the same five-day complete-packet service duration.
 
-**Alex becomes ready on October 19. Four weeks remain in the rotation.**
+The computing preparation request also begins October 7, once sponsorship and request details are ready. It clearly requests an empty environment for fabricated-data testing, with production study access still disabled.
+
+### October 7–14: two independent branches progress
+
+**Review branch:** The office reviews the complete personnel packet from October 7 to October 14.
+
+**Preparation branch:** Sam handles identity setup, MFA, empty-environment preparation, packages, and testing from October 7 to October 12. Alex practices on fabricated records once that environment is ready.
+
+The review is still pending when technical preparation finishes. That is an expected, valid state. The empty environment is ready; production study data is not yet accessible.
+
+### October 14–16: perform the same release checks
+
+The recorded personnel decision arrives October 14 under the assumptions. The data steward performs the same two-day role, evidence, orientation, and release checks.
+
+The prepared plan saves no time by omitting these checks. It simply reaches them with a complete packet earlier and an already-prepared environment.
+
+### October 16–19: activate the confirmed role
+
+The review/release branch finishes October 16. The environment branch finished October 12. Because both are ready, the same one-day activation and scoped-access test can begin October 16.
+
+**Alex becomes ready October 19, with four weeks left in the rotation.** The original plan reaches exactly the same readiness milestone November 2, with two weeks left.
+
+### What foresight changed, concretely
+
+The student did the remaining training sooner. The coordinator verified the right record sooner. The PI confirmed a specific role sooner. The reviewer received a complete, coherent packet sooner. The computing administrator prepared permitted infrastructure while review was happening.
+
+The amount of required training, the assumed complete-packet review duration, the local checks, and the final verification remained the same. The avoided work was the late discovery and repeated handoff cycle; the overlapped work was technical preparation.
 
 ## 9. The exact two-week comparison
 
@@ -283,6 +443,38 @@ The three environment-preparation days still happen. They stop extending the end
 | **Combined gain** | **10** |
 
 The complete-packet review takes five days in both paths. The gain comes from readiness and sequencing.
+
+### Where the two weeks actually go
+
+Think of the original plan as two avoidable loops around an otherwise unchanged process:
+
+```text
+LOOP 1 — Discovering the packet problem too late
+Files received → assumed complete → submitted incomplete
+→ 3 working days until return
+→ 4 working days of correction and handoffs
+→ complete submission finally ready
+
+LOOP 2 — Discovering the technical task too late
+Clearance completed → first environment request
+→ 3 working days of preparation
+→ final activation can finally begin
+```
+
+The day-one check moves the necessary course completion and role clarification into the existing preparation window, removing the seven-day late-discovery/correction loop. Splitting the access task places the three-day empty-environment branch inside time already spent on review and release checks.
+
+The prepared plan's dependency structure is:
+
+```mermaid
+flowchart LR
+    P["Complete packet and initial sponsorship: 2 days"] --> R["Complete-packet review: 5 days"]
+    R --> C["Local release checks: 2 days"]
+    P --> E["Empty environment and fabricated-data test: 3 days"]
+    C --> A["Authorized activation and verification: 1 day"]
+    E --> A
+```
+
+The environment branch finishes at working-day boundary 5. The review-and-release branch finishes at boundary 9. Activation waits for both, so readiness is boundary 10. The shorter branch creates no additional end-date delay.
 
 ## 10. Why two weeks matters to this student
 
@@ -347,7 +539,7 @@ The demo should not always return the same impressive number.
 
 In the outage variant, both complete packets are ready before the same reopening date. Both then need five days of review and two days of local checks. The baseline adds three days of late environment preparation; the improved plan has completed it already. Only those three days are recovered.
 
-That variant models institutional-system uncertainty with a fictional calculation. Foresight cannot remove an external shutdown simply by describing it.
+That variant illustrates an external system constraint. The calculation remains fictional, and changing a plan cannot remove a fixed shutdown.
 
 If processing times are unknown, offer named scenarios such as “review takes 5 days” and “review takes 10 days.” Probability distributions require a separate evidentiary basis. Arbitrary ranges should not be labeled confidence intervals.
 
@@ -355,9 +547,9 @@ If processing times are unknown, offer named scenarios such as “review takes 5
 
 ### Screen 1 — My starting point
 
-> **Alex · Student researcher · Onboarding**<br>
-> Joining REST-101 for supervised data-quality work.<br>
-> Rotation: Oct 5–Nov 16. Availability: 12 hours/week.<br>
+> **Alex · Student researcher · Onboarding**\
+> Joining REST-101 for supervised data-quality work.\
+> Rotation: Oct 5–Nov 16. Availability: 12 hours/week.\
 > Desired milestone: first authorized data task.
 
 The profile establishes the user's actual stage and makes the goal concrete.
@@ -378,16 +570,16 @@ Each finding links to its fictional source. A human can correct the extraction b
 
 Show the returned-packet branch and late technical preparation as configured scenario assumptions, not certain future events.
 
-> **Scenario readiness: November 2**<br>
-> 20 working days from onboarding start.<br>
+> **Scenario readiness: November 2**\
+> 20 working days from onboarding start.\
 > Inspect unresolved training evidence and technical preparation scheduled after release.
 
 ### Screen 4 — Compare the prepared plan
 
 Enable two interventions: resolve the evidence before submission, and prepare the empty environment during review.
 
-> **Scenario readiness: October 19**<br>
-> 10 working days from onboarding start.<br>
+> **Scenario readiness: October 19**\
+> 10 working days from onboarding start.\
 > **14 calendar days earlier under these assumptions.**
 
 Show the same five-day review bar in both plans so the source of the gain is immediately clear.
@@ -408,11 +600,21 @@ The export makes the scenario actionable. It does not itself submit amendments, 
 
 ## 14. A fictional agent exchange
 
-**Administration reviewer:** “The checklist says training is complete, but the records only establish that two files were received. HS-02 remains unresolved.”
+**Administration reviewer:** “The form says all training is complete. Your records establish RCR and Privacy Awareness completion, but neither establishes HS-02. The review office would need that missing evidence.”
 
 **Alex:** “I thought sending my certificates meant I was done.”
 
-**Onboarding coordinator:** “Let's verify that now. In this scenario, the missing component fits into your first preparation block, and Jordan can check it before submission.”
+**Onboarding coordinator:** “Let's verify that now. If you already completed HS-02, we need the right record. If it is unfinished, we need the remaining task. In this scenario, you have two hours left and an available preparation block today.”
+
+**Alex:** “I thought the 'certificates received' checkmark meant somebody had checked the requirement.”
+
+**Administration reviewer:** “That is the mismatch. Receipt confirms that files arrived. Verification confirms that the files establish the particular requirement. Those should have separate statuses.”
+
+**Access reviewer:** “There is also a scope mismatch. Your task is read-only analysis of the coded extract, but the template requests full study-workspace access. Jordan and the PI need to confirm the duties and correct both documents.”
+
+**Alex:** “Would that stop the entire trial?”
+
+**Administration reviewer:** “The scenario models a return of your personnel addition for correction. The existing trial stays approved. The next action is to resolve these specific items and resubmit, rather than redesign the study.”
 
 **Computing reviewer:** “The empty environment can also be prepared before production data access is allowed.”
 
@@ -430,11 +632,15 @@ This dialogue is invented. Generated explanations should remain distinguishable 
 
 ### Thirty-second pitch
 
-> “Our starting point was a familiar research experience: you've sent your documents, but you still don't know when you can begin. Trial Researcher rehearses onboarding using your role, study requirements, and the tasks behind access. In our fictional demo, a student waits four weeks because of a returned packet and technical setup started too late. Catching the missing requirement and preparing the empty workspace during review makes them ready two weeks earlier, with the same review duration. They can see exactly which actions change the timeline.”
+> “Our starting point was a familiar research experience: you've sent your documents, but you still don't know when you can begin. Lookahead rehearses onboarding using your role, study requirements, and the tasks behind access. In our fictional demo, a student waits four weeks because of a returned packet and technical setup started too late. Catching the missing requirement and preparing the empty workspace during review makes them ready two weeks earlier, with the same review duration. They can see exactly which actions change the timeline.”
+
+### Demonstration boundary
+
+The fictional comparison explains a scheduling mechanism. It does not establish that a real institution made an error, that an actual student lacked training, or that the product has saved two weeks in practice.
 
 ### Product sentence
 
-> **“Trial Researcher lets research teams rehearse their next steps, see what could delay them, and prepare the work that can happen now.”**
+> **“Lookahead lets research teams rehearse their next steps, see what could delay them, and prepare the work that can happen now.”**
 
 For Track 2, connect the example to an existing trial team: bringing an analyst, coordinator, or site staff member into an authorized role is part of study operations. This is one narrow operational workflow. Claims about trial launch, enrollment, amendments, monitoring, or clinical outcomes need their own models and evidence.
 
@@ -460,6 +666,8 @@ Those checks establish coherent demonstration behavior. Real-world value would r
 | Intake or screening | Initial examination for completeness and administrative issues |
 | Deficiency notice | Request to supply or correct information; not automatically rejection of the research |
 | Human-subjects training | Role-appropriate training under the applicable rules |
+| HS-02 | Invented local code for this case's Human Subjects Research — Student Data Analyst course; it is not a universal regulatory course identifier |
+| Returned for revisions | This fictional packet needs corrections before the personnel review can be completed; the existing study approval is unchanged |
 | RCR | Responsible Conduct of Research; not automatically interchangeable with every human-subjects requirement |
 | SOP | Standard operating procedure describing a repeatable process |
 | Role or delegation record | Documentation of assigned responsibilities |
@@ -484,4 +692,9 @@ This document is a proposed narrative, a specified scheduling example, and a dem
 
 The central opportunity is to turn vague states such as “waiting for approval” into a source-linked dependency model, then let the user change a plan and see the consequences. The key editable assumptions are training-evidence status, permission for early technical preparation, review duration, and any fixed institutional reopening date.
 
-Reviewers should challenge the dependency assumptions, identify where a checklist would suffice, and assess whether the simulation adds enough value to justify the scope. Preserve the fictional label and distinguish the constructed two-week outcome from measured results.
+Related public guides:
+
+- [Lookahead simulation workspace](docs/microfish-workspace.md)
+- [Research tools and data flow](docs/research-workspace.md)
+
+When evaluating this case, challenge the dependency assumptions, identify where a checklist would suffice, and assess whether the simulation adds useful insight. Preserve the fictional label and distinguish the constructed two-week outcome from measured performance.

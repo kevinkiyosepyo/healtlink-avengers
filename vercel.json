@@ -5,11 +5,28 @@
   "buildCommand": "npm run build --prefix frontend",
   "outputDirectory": "frontend/dist",
   "functions": {
-    "api/simulate.js": { "maxDuration": 60 },
+    "api/simulate.js": {
+      "maxDuration": 60
+    },
     "api/institution.js": {
-      "maxDuration": 60,
+      "maxDuration": 180,
       "includeFiles": "{server/sourcePdfWorker.js,node_modules/unpdf/dist/**}"
     },
-    "api/transcribe.js": { "maxDuration": 60 }
+    "api/transcribe.js": {
+      "maxDuration": 60
+    },
+    "api/evidence.js": {
+      "maxDuration": 60
+    },
+    "api/openai.js": {
+      "maxDuration": 60
+    },
+    "api/anthropic.js": {
+      "maxDuration": 60
+    },
+    "api/institution-preview.js": {
+      "maxDuration": 30,
+      "includeFiles": "{server/sourcePdfWorker.js,node_modules/unpdf/dist/**}"
+    }
   }
 }
