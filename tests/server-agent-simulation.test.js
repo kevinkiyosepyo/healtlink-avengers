@@ -14,6 +14,7 @@ const anthropicKey = `sk-ant-${'b'.repeat(50)}`;
 const workspaceId = `wrkspc_${'c'.repeat(24)}`;
 const batch = { offset: 290, total: 300 };
 const reviews = () => agentBatch(batch).map(agent => ({ agentId: agent.id, summary: 'The protocol needs a clear consent comprehension check.', questions: ['How will comprehension be checked?'], topics: ['consent'], sourceIds: ['doc-8'] }));
+const reviewOutput = (entries = reviews()) => ({ reviews: Object.fromEntries(entries.map(({ agentId, ...review }) => [agentId, review])) });
 const complete = (provider, text) => provider === 'anthropic'
   ? { type: 'message', role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text }] }
   : { status: 'completed', output: [{ type: 'reasoning', summary: [] }, { type: 'message', role: 'assistant', content: [{ type: 'output_text', text }] }] };
@@ -40,7 +41,7 @@ for (const provider of ['openai', 'anthropic']) {
     const calls = [];
     const { response, result } = await request(provider, async (url, init) => {
       calls.push({ url, init, payload: JSON.parse(init.body) });
-      return Response.json(complete(provider, JSON.stringify({ reviews: reviews() })));
+      return Response.json(complete(provider, JSON.stringify(reviewOutput())));
     });
     assert.equal(response.status, 200);
     assert.equal(result.reviews.length, 10);
@@ -60,6 +61,12 @@ for (const provider of ['openai', 'anthropic']) {
     if (provider === 'openai') {
       assert.equal(call.payload.text.format.type, 'json_schema');
       assert.equal(call.payload.text.format.strict, true);
+      const slots = call.payload.text.format.schema.properties.reviews;
+      assert.equal(slots.type, 'object');
+      assert.equal(slots.additionalProperties, false);
+      assert.deepEqual(slots.required, agentBatch(batch).map(agent => agent.id));
+      assert.deepEqual(Object.keys(slots.properties), slots.required);
+      assert.deepEqual(slots.properties['agent-291'].properties.sourceIds.items.enum, Array.from({ length: 9 }, (_, index) => `doc-${index}`));
       assert.equal(call.init.headers.Authorization, `Bearer ${apiKey}`);
     } else {
       assert.equal(call.init.headers['anthropic-workspace-id'], workspaceId);
@@ -74,7 +81,7 @@ for (const provider of ['openai', 'anthropic']) {
       return Response.json(calls.length === 1
         ? provider === 'anthropic' ? { type: 'message', role: 'assistant', stop_reason: 'max_tokens', content: [] }
           : { status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' }, output: [] }
-        : complete(provider, JSON.stringify({ reviews: reviews() })));
+        : complete(provider, JSON.stringify(reviewOutput())));
     });
     assert.equal(response.status, 200);
     assert.equal(result.reviews.length, 10);
@@ -83,22 +90,68 @@ for (const provider of ['openai', 'anthropic']) {
     const messages = provider === 'anthropic' ? 'messages' : 'input';
     assert.deepEqual(calls[0][messages], calls[1][messages]);
   });
+
+  test(`${provider}: malformed completed batches retry once with the full original study context`, async () => {
+    const good = reviews();
+    for (const invalid of [
+      reviewOutput([{ ...good[0], sourceIds: ['Study-8.md'] }, ...good.slice(1)]),
+      reviewOutput(good.slice(1)),
+      reviewOutput([{ ...good[0], agentId: 'agent-unknown' }, ...good.slice(1)]),
+      reviewOutput([{ ...good[0], topics: ['invented-topic'] }, ...good.slice(1)]),
+      { reviews: good },
+      null,
+    ]) {
+      const calls = [];
+      const { response, result } = await request(provider, async (url, init) => {
+        calls.push(JSON.parse(init.body));
+        return Response.json(complete(provider, JSON.stringify(calls.length === 1 ? invalid : reviewOutput())));
+      });
+      assert.equal(response.status, 200);
+      assert.equal(result.reviews.length, 10);
+      assert.equal(calls.length, 2);
+      const messages = provider === 'anthropic' ? 'messages' : 'input';
+      assert.deepEqual(calls[0][messages], calls[1][messages]);
+      assert.equal(JSON.parse(calls[1][messages][0].content).documents.length, 9);
+      assert.match(provider === 'anthropic' ? calls[1].system : calls[1].instructions, /previous attempt failed format validation/);
+      assert.deepEqual(result.reviews, good);
+    }
+  });
 }
 
 test('invented citations, missing agents, duplicate IDs and unreadable output fail closed with safe errors', async () => {
   const good = reviews();
   for (const text of [
-    JSON.stringify({ reviews: [{ ...good[0], sourceIds: ['not-supplied'] }, ...good.slice(1)] }),
-    JSON.stringify({ reviews: good.slice(1) }),
-    JSON.stringify({ reviews: [good[1], ...good.slice(1)] }),
+    JSON.stringify(reviewOutput([{ ...good[0], sourceIds: ['not-supplied'] }, ...good.slice(1)])),
+    JSON.stringify(reviewOutput(good.slice(1))),
+    JSON.stringify(reviewOutput([good[1], ...good.slice(1)])),
     `invalid JSON containing ${apiKey}`,
   ]) {
-    const { response, result } = await request('openai', async () => Response.json(complete('openai', text)));
+    let calls = 0;
+    const { response, result } = await request('openai', async () => {
+      calls++;
+      return Response.json(complete('openai', text));
+    });
     assert.equal(response.status, 502);
+    assert.equal(calls, 2);
     assert.equal(result.code, 'invalid_agent_reviews');
     assert(!JSON.stringify(result).includes(apiKey));
     assert.equal(result.reviews, undefined);
   }
+});
+
+test('a study without uploaded documents requires empty citations and never creates fake source IDs', async () => {
+  let payload;
+  const emptyReferences = reviews().map(review => ({ ...review, sourceIds: [] }));
+  const { response, result } = await request('openai', async (url, init) => {
+    payload = JSON.parse(init.body);
+    return Response.json(complete('openai', JSON.stringify(reviewOutput(emptyReferences))));
+  }, { context: { agentCount: 300, overview: 'A fictional study described in text only.', documents: [] } });
+  assert.equal(response.status, 200);
+  assert.equal(result.reviews.length, 10);
+  const sourceIds = payload.text.format.schema.properties.reviews.properties['agent-291'].properties.sourceIds;
+  assert.equal(sourceIds.maxItems, 0);
+  assert.equal(sourceIds.items.enum, undefined);
+  assert(result.reviews.every(review => review.sourceIds.length === 0));
 });
 
 test('invalid count, offset, count mismatch and forged institution token never reach a provider', async () => {

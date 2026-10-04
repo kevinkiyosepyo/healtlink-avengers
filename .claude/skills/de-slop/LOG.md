@@ -10,3 +10,4 @@ Recurring corrections in this repo. Read before running the skill; add one line 
 - 2026-10-04 · appearance controls navigated between separate applications → keep one workspace and shared theme tokens; verify graph selection, playback, and draft inputs survive the switch.
 - 2026-10-04 · every unfinished provider answer became a shorter-question error → classify output limits, retry only the affected reviewer with all source context, and bound the whole run.
 - 2026-10-04 · a fixed university panel consumed chat space → collapse it per chat by default and place expanded details in the message scroll area, keeping the composer available.
+- 2026-10-04 · model JSON enforced review shape but allowed duplicate agents and invented source IDs → require exact agent keys and document ID enums, then retry invalid batches with the original context.

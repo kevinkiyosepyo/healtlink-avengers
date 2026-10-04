@@ -1,36 +1,46 @@
-import { AGENT_BATCH_SIZE, agentBatch, REVIEW_TOPICS, validateAgentReviews } from '../shared/reviewAgents.js';
+import { agentBatch, REVIEW_TOPICS, validateAgentReviews } from '../shared/reviewAgents.js';
 import { CONTEXT_INSTRUCTIONS } from './simulationContext.js';
 import { HttpError } from './security.js';
 
 const OUTPUT_LIMITS = [4000, 8000];
-const schema = {
-  type: 'object', additionalProperties: false, required: ['reviews'],
-  properties: { reviews: {
-    type: 'array', minItems: AGENT_BATCH_SIZE, maxItems: AGENT_BATCH_SIZE,
-    items: {
-      type: 'object', additionalProperties: false,
-      required: ['agentId', 'summary', 'questions', 'topics', 'sourceIds'],
-      properties: {
-        agentId: { type: 'string' }, summary: { type: 'string', minLength: 1, maxLength: 600 },
-        questions: { type: 'array', minItems: 1, maxItems: 2, items: { type: 'string', minLength: 1, maxLength: 200 } },
-        topics: { type: 'array', minItems: 1, maxItems: 3, items: { type: 'string', enum: REVIEW_TOPICS } },
-        sourceIds: { type: 'array', maxItems: 4, items: { type: 'string' } },
-      },
+function batchSchema(agents, sourceIds) {
+  const review = {
+    type: 'object', additionalProperties: false,
+    required: ['summary', 'questions', 'topics', 'sourceIds'],
+    properties: {
+      summary: { type: 'string', minLength: 1, maxLength: 600 },
+      questions: { type: 'array', minItems: 1, maxItems: 2, items: { type: 'string', minLength: 1, maxLength: 200 } },
+      topics: { type: 'array', minItems: 1, maxItems: 3, items: { type: 'string', enum: REVIEW_TOPICS } },
+      sourceIds: { type: 'array', maxItems: Math.min(4, sourceIds.length), items: {
+        type: 'string', ...(sourceIds.length ? { enum: sourceIds } : {}),
+      } },
     },
-  } },
-};
+  };
+  // Required keys give each agent exactly one slot. An array's length and enum
+  // cannot prevent duplicate agents, and unrestricted strings allow false citations.
+  return {
+    type: 'object', additionalProperties: false, required: ['reviews'],
+    properties: { reviews: {
+      type: 'object', additionalProperties: false, required: agents.map(agent => agent.id),
+      properties: Object.fromEntries(agents.map(agent => [agent.id, review])),
+    } },
+  };
+}
 
 export async function generateAgentBatch({ batch, provider, model, input, sourceIds, requestProvider }) {
   let agents;
   try { agents = agentBatch(batch); } catch (error) {
     throw new HttpError(400, 'invalid_agent_batch', error.message);
   }
-  const instructions = `Generate one distinct research ethics review for EACH of the ten fictional agent perspectives listed below. Each perspective combines its role and review lens. These are composite AI perspectives, never actual university board members. Use the supplied study and any server-verified institution guidance. Do not invent institutional rules, clinical recommendations, empirical findings, or numerical predictions. Separate observed information from missing evidence. Return only a JSON object matching this schema: ${JSON.stringify(schema)}. Keep each summary under 400 characters and each question under 160 characters. Include one or two actionable, study-specific questions. Choose one to three relevant topics. Cite only document IDs that actually support the review; use an empty sourceIds array when none do. Do not invent agent interactions or source citations. Return every listed agentId exactly once. Allowed document IDs: ${JSON.stringify(sourceIds)}. Perspectives: ${JSON.stringify(agents)}.${CONTEXT_INSTRUCTIONS}`;
+  const schema = batchSchema(agents, sourceIds);
+  const instructions = `Generate one distinct research ethics review for EACH of the ten fictional agent perspectives listed below. Each perspective combines its role and review lens. These are composite AI perspectives, never actual university board members. Use the supplied study and any server-verified institution guidance. Do not invent institutional rules, clinical recommendations, empirical findings, or numerical predictions. Separate observed information from missing evidence. Return only a JSON object matching this schema: ${JSON.stringify(schema)}. The reviews field is an object keyed by the exact listed agent IDs, with every key present exactly once. Keep each summary under 400 characters and each question under 160 characters. Include one or two actionable, study-specific questions. Choose one to three relevant topics. Cite only the exact allowed document IDs that actually support the review; never filenames, URLs, institutional source IDs, or agent IDs. Use an empty sourceIds array when none do. Do not invent agent interactions or source citations. Allowed document IDs: ${JSON.stringify(sourceIds)}. Perspectives: ${JSON.stringify(agents)}.${CONTEXT_INSTRUCTIONS}`;
+  let correction = '';
   for (const [attempt, limit] of OUTPUT_LIMITS.entries()) {
+    const attemptInstructions = instructions + correction;
     const data = await requestProvider(provider === 'anthropic' ? {
-      model, max_tokens: limit, system: instructions, messages: input,
+      model, max_tokens: limit, system: attemptInstructions, messages: input,
     } : {
-      model, store: false, max_output_tokens: limit, instructions, input,
+      model, store: false, max_output_tokens: limit, instructions: attemptInstructions, input,
       text: { format: { type: 'json_schema', name: 'agent_reviews', strict: true, schema } },
     });
     const limited = provider === 'anthropic'
@@ -48,9 +58,15 @@ export async function generateAgentBatch({ batch, provider, model, input, source
     try {
       if (!text || text.length > 30_000) throw new Error('Invalid output size');
       const parsed = JSON.parse(text);
-      const reviews = validateAgentReviews(parsed.reviews, agents, sourceIds);
+      if (!parsed.reviews || Array.isArray(parsed.reviews) || typeof parsed.reviews !== 'object') throw new Error('Invalid review slots');
+      const entries = Object.entries(parsed.reviews).map(([agentId, review]) => ({ ...review, agentId }));
+      const reviews = validateAgentReviews(entries, agents, sourceIds);
       return { reviews, agentCount: batch.total, offset: batch.offset, provider, model };
     } catch {
+      if (attempt === 0) {
+        correction = ' The previous attempt failed format validation. Regenerate this batch using the exact required review keys and allowed document IDs. Do not add sources that are not in the allowed list. Return complete JSON, without Markdown fences.';
+        continue;
+      }
       throw new HttpError(502, 'invalid_agent_reviews', 'The AI returned invalid agent reviews or source references. Completed batches are saved in the graph. Retry the simulation.');
     }
   }
