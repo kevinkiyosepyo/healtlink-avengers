@@ -8,10 +8,34 @@ import ResearcherLogin from "./components/ResearcherLogin.vue";
 import SampleCaseGraph from "./components/SampleCaseGraph.vue";
 import NewSimulationDialog from "./components/NewSimulationDialog.vue";
 import { useResearcherAccount } from "./composables/useResearcherAccount.js";
+<<<<<<< Updated upstream
 import { useResearcherProfile } from "./composables/useResearcherProfile.js";
 import { useSimulationWorkspace } from "./composables/useSimulationWorkspace.js";
 import { PROMPT_LIMIT, TITLE_LIMIT, STORAGE_KEY } from "./lib/simulationWorkspace.js";
 import { workspaceStorageKey } from "./lib/workspaceStorage.js";
+=======
+import { useVoice } from "./composables/useVoice.js";
+import { appendSegment, cleanTranscript } from "./lib/voice.js";
+import { PROMPT_LIMIT, TITLE_LIMIT } from "./lib/simulationWorkspace.js";
+
+// Views load on demand; if a chunk can't be fetched (e.g. a stale tab after a
+// deploy) show a retry instead of an empty pane.
+const LoadError = () =>
+  h("p", { class: "load-error mono" }, ["this view failed to load — ", h("button", { class: "glyph-link", onClick: () => window.location.reload() }, "reload")]);
+const Nothing = () => null;
+const lazy = (loader, errorComponent = LoadError) => defineAsyncComponent({ loader, errorComponent, timeout: 20_000 });
+const SimulationGraph = lazy(() => import("./components/SimulationGraph.vue"));
+// Welcome effects (motion-v) and settings load on demand to keep first paint light.
+const BlurReveal = lazy(() => import("./components/ui/blur-reveal/BlurReveal.vue"));
+const FlickeringGrid = lazy(() => import("./components/ui/flickering-grid/FlickeringGrid.vue"), Nothing);
+const SettingsDialog = lazy(() => import("./components/SettingsDialog.vue"));
+const settingsMounted = ref(false);
+const JumpScare = lazy(() => import("./components/fx/JumpScare.vue"), Nothing);
+const LibraryPage = lazy(() => import("./components/LibraryPage.vue"));
+const StudyBuildPage = lazy(() => import("./components/StudyBuildPage.vue"));
+const PreflightPage = lazy(() => import("./components/PreflightPage.vue"));
+const TimelinePage = lazy(() => import("./components/TimelinePage.vue"));
+>>>>>>> Stashed changes
 
 const { account, busy: accountBusy, error: accountError, ready: providerReady, google, connect, disconnect, signout } = useResearcherAccount();
 const { university, universityError, saveUniversity } = useResearcherProfile(account);
@@ -218,6 +242,7 @@ const isRunning = computed(() => latestRun.value?.status === "running");
 const canSubmit = computed(
   () => Boolean(activeSession.value?.draft.trim()) && !isRunning.value,
 );
+<<<<<<< Updated upstream
 function sessionStatus(session) {
   return session.runs.at(-1)?.status ?? "draft";
 }
@@ -231,6 +256,20 @@ function statusLabel(status) {
       draft: "Draft",
     }[status] || "Draft"
   );
+=======
+const research = useResearch(sessions);
+const account = useResearcherAccount();
+
+// Voice dictation: talk continuously; segments are cleaned and appended to the
+// draft, and saying "run it" submits (hands-free, e.g. on the go).
+const voice = useVoice({ getApiKey: () => (research.settings.mode === "openai" && research.keyStatus.value === "valid" ? research.apiKey.value.trim() : "") });
+function onVoiceSegment(raw) {
+  const session = activeSession.value;
+  if (!session) return;
+  const { text, command } = cleanTranscript(raw);
+  session.draft = appendSegment(session.draft, text);
+  if (command === "send") nextTick(submitRun);
+>>>>>>> Stashed changes
 }
 function runForMessage(message) {
   return activeSession.value?.runs.find((run) => run.id === message.runId);
@@ -782,6 +821,7 @@ watch(
                 {{ workspaceKind === 'personal' ? 'Chats are saved for your Google account in this browser.' : 'Demo chats are saved in this browser.' }}
               </p>
             </div>
+<<<<<<< Updated upstream
           </section>
           <section
             v-if="activeView !== 'Chat'"
@@ -807,6 +847,68 @@ watch(
                 v-if="isRunning"
                 class="stop-button"
                 @click="stopRun(activeId)"
+=======
+          </div>
+        </section>
+
+        <div
+          v-if="activeView === 'split'"
+          class="split-handle"
+          role="separator"
+          tabindex="0"
+          aria-orientation="vertical"
+          aria-label="Resize chat and graph"
+          :aria-valuenow="Math.round(splitRatio)"
+          aria-valuemin="30"
+          aria-valuemax="70"
+          @pointerdown="startResize"
+          @keydown="resizeKeydown"
+        ></div>
+
+        <section v-if="activeView !== 'chat'" class="graph-pane" aria-label="Simulation graph">
+          <SimulationGraph :run="graphRun" :stances="latestStances" :stance-source="latestRecord?.provenance?.model || ''" :session-title="activeSession.title" />
+          <div v-if="activeView === 'graph' && isRunning" class="graph-stop">
+            <button class="stop-btn mono" @click="stopRun(activeId)">
+              <Square :size="11" fill="currentColor" /> stop
+            </button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <SettingsDialog v-if="settingsMounted" v-model:open="settingsOpen" :research="research" :account="account" />
+
+    <Dialog v-model:open="paletteOpen">
+      <DialogContent class="overlay-surface overflow-hidden p-0" :show-close-button="false">
+        <DialogTitle class="sr-only">Jump to chat</DialogTitle>
+        <DialogDescription class="sr-only">Search saved simulations by keyword or meaning</DialogDescription>
+        <Command :should-filter="false" @update:search-term="paletteTerm = $event">
+          <CommandInput placeholder="search chats by keyword or meaning…" class="mono text-[12.5px]" />
+          <CommandList>
+            <CommandGroup v-if="!paletteTerm.trim()" heading="actions">
+              <CommandItem value="new simulation" class="mono" @select="newChat">
+                new simulation
+              </CommandItem>
+              <CommandItem value="source library" class="mono" @select="navigate('library')">
+                source library
+              </CommandItem>
+              <CommandItem value="study build" class="mono" @select="navigate('build')">
+                study build
+              </CommandItem>
+              <CommandItem value="document preflight" class="mono" @select="navigate('preflight')">
+                document preflight
+              </CommandItem>
+              <CommandItem value="start-up timeline" class="mono" @select="navigate('timeline')">
+                start-up timeline
+              </CommandItem>
+            </CommandGroup>
+            <CommandGroup heading="chats">
+              <CommandItem
+                v-for="session in paletteSessions"
+                :key="session.id"
+                :value="session.id"
+                @select="selectChat(session.id)"
+>>>>>>> Stashed changes
               >
                 <AppIcon name="stop" :size="13" />{{ latestRun?.mode === 'openai' ? 'Stop waiting' : 'Stop run' }}
               </button>

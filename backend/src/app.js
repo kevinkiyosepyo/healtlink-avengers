@@ -40,7 +40,11 @@ export function createApp({ serveStatic = existsSync(DIST), env = process.env } 
 
   app.get("/api/health", (req, res) => res.json({ ok: true }));
   app.use((req, res, next) => {
+<<<<<<< Updated upstream
     if (["/api/account", "/api/openai", "/api/simulate", "/api/institution", "/api/transcribe", "/api/sync"].includes(req.path) || req.path.startsWith("/api/sync/")
+=======
+    if (["/api/account", "/api/openai", "/api/simulate"].includes(req.path)
+>>>>>>> Stashed changes
       || req.path === "/api/auth" || req.path.startsWith("/api/auth/")) {
       return accountApi(req, res);
     }

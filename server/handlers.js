@@ -3,10 +3,13 @@ import {
   API_KEY_PATTERN, HttpError, SESSION_SECONDS, SIMULATION_BODY_LIMIT, json, keyCookie, readApiKey,
   readJson, requireSameOrigin, sealApiKey, sealInstitutionProfile, settings,
 } from "./security.js";
+<<<<<<< Updated upstream
 import { researchInstitution } from "./institutions.js";
 import { CONTEXT_INSTRUCTIONS, institutionInstructions, institutionPerspectives, simulationContext } from "./simulationContext.js";
 import { transcribeAudio } from "./transcription.js";
 import { createSyncHandler, syncStoreFromEnv } from "./sync.js";
+=======
+>>>>>>> Stashed changes
 
 const OPENAI_BASE = "https://api.openai.com/v1";
 const PERSPECTIVES = [
@@ -69,8 +72,12 @@ function extractText(data) {
   return text.slice(0, 5000);
 }
 
+<<<<<<< Updated upstream
 export function createApiHandler({ env = process.env, fetchImpl = globalThis.fetch, fetchSource, authenticate = defaultAuthenticate, syncStore = syncStoreFromEnv(env) } = {}) {
   const handleSync = createSyncHandler({ config: settings(env), store: syncStore, authenticate });
+=======
+export function createApiHandler({ env = process.env, fetchImpl = globalThis.fetch, authenticate = defaultAuthenticate } = {}) {
+>>>>>>> Stashed changes
   return async function handleApiRequest(request) {
     const pathname = new URL(request.url).pathname.replace(/\/$/, "");
     const config = settings(env);
@@ -85,7 +92,6 @@ export function createApiHandler({ env = process.env, fetchImpl = globalThis.fet
           providers: { google: true, chatgpt: false },
           user: session ? { id: session.id, name: session.name, email: session.email, image: session.image, provider: "google" } : null,
           openaiConnected: Boolean(connected),
-          cloudSync: Boolean(handleSync),
           model: config.model,
         });
       }
@@ -97,11 +103,15 @@ export function createApiHandler({ env = process.env, fetchImpl = globalThis.fet
         if (providerRoute && providerRoute[1] !== "google") return json({ error: "This sign-in provider is not available.", code: "not_found" }, 404);
         return await handleAuth(request, config);
       }
+<<<<<<< Updated upstream
       if (pathname === "/api/sync" || pathname.startsWith("/api/sync/")) {
         if (!handleSync) throw new HttpError(503, "sync_not_configured", "Cloud backup isn't configured on this server.");
         return await handleSync(request);
       }
       if (!["/api/openai", "/api/simulate", "/api/institution", "/api/transcribe"].includes(pathname)) return json({ error: "This API route does not exist.", code: "not_found" }, 404);
+=======
+      if (!["/api/openai", "/api/simulate"].includes(pathname)) return json({ error: "This API route does not exist.", code: "not_found" }, 404);
+>>>>>>> Stashed changes
       requireMethod(request, pathname === "/api/openai" ? ["POST", "DELETE"] : ["POST"]);
       requireSameOrigin(request, config);
       const session = await authenticate(request, config);
