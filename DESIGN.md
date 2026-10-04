@@ -80,6 +80,11 @@ No shadows in-app. Depth = surface step + hairline (`canvas → surface → surf
 - **Timeline:** plan toggle; Gantt rows (owner initials, critical bars in accent, slack hatched, baseline dashed, added delay striped) and a red target line; the detail panel has a 0–15 day delay slider with a one-line consequence ("pushes first participant in by 5 days — past target").
 - Welcome screen: a `beta` pill, the line "rehearse the trial before it reaches your sites.", trial starter prompts, and tool cards. No invented metrics, logos or testimonials.
 
+## 6d. Evidence panel
+- Sits under the analysis panel for in-scope your-key runs. While running: a `deliberating` badge plus a mono stepper (plan → scholarly search → web (secondary) → opening positions → rebuttals → consensus), with ○ pending, ◐ current in accent, and ● done in teal.
+- Tabs: **consensus** (recommendation chip, the decision sentence, the panel estimate beside the *computed* cross-check, the calculation in `.code-text`, key points with `S#` citation chips, dissent, evidence gaps, citation-audit line); **debate** (per agent: opening → final estimate, claims with strength, rebuttal responses as agree/partly/disagree badges, revised position); **provenance** (numbered pipeline of queries, database log with links, web filtering with excluded links, and the evidence pack where each source shows its link, metadata, credibility badge with an expandable "why", relevance, and who cited it).
+- Citation chips use site-tone outlines and never lowercase their ids. Clicking one switches to provenance and highlights the source with an accent ring. "uncited" chips use amber.
+
 ## 7. Graph view: knowledge graph (Vue Flow + d3-force)
 - Canvas `--canvas` with a faint dot grid. Layout comes from d3-force (link, charge, collide, center). Dragging a node pins it while neighbors follow, and on release it settles back.
 - **Category colors** (muted and warm-leaning, never brighter than the accent; separate light/dark values): `--kg-core` coral (the protocol change), `--kg-participant` sage, `--kg-site` slate blue, `--kg-oversight` ochre, `--kg-sponsor` taupe, `--kg-data` mauve. Coral as an *activity* signal belongs only to running state.

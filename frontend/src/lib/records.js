@@ -3,7 +3,7 @@
 // lives in useResearch.
 import { AGENTS, STANCE_LEVELS, agentId } from "./agents.js";
 
-export const RECORD_SCHEMA_VERSION = 1;
+export const RECORD_SCHEMA_VERSION = 2; // v2 adds `deliberation`
 
 // Stable JSON (sorted keys) so the same content always hashes the same.
 export function canonicalJson(value) {
@@ -33,7 +33,7 @@ export function analysisKey({ prompt, model, temperature, seed, promptVersion })
  * Build a record. The fingerprint covers everything except itself, so any
  * later edit to an exported file is detectable with verifyRecord().
  */
-export async function createRecord({ runId, sessionId, sessionTitle, prompt, mode, guardrails, analysis = null, provenance = null, error = null, analysisKey = null, createdAt = new Date().toISOString() }) {
+export async function createRecord({ runId, sessionId, sessionTitle, prompt, mode, guardrails, analysis = null, provenance = null, error = null, analysisKey = null, deliberation = null, createdAt = new Date().toISOString() }) {
   const body = {
     schemaVersion: RECORD_SCHEMA_VERSION,
     runId,
@@ -47,6 +47,7 @@ export async function createRecord({ runId, sessionId, sessionTitle, prompt, mod
     analysis,
     error,
     analysisKey, // hash of prompt + model + parameters; identical analyses share it
+    deliberation, // evidence pack, debate rounds, consensus and citation audit (see lib/evidence)
     disclaimer: "Illustrative simulation output. Not medical advice; verify before use.",
   };
   return { ...body, fingerprint: await sha256(canonicalJson(body)) };

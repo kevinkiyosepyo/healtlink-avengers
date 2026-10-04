@@ -103,6 +103,16 @@ export function parseAnalysis(content) {
   return { inScope: true, stances, assumptions: list(data.assumptions), caveats: list(data.caveats) };
 }
 
+/** Parse a strict structured-output message; refusals and bad JSON fail closed. */
+export function parseStrictJson(message) {
+  if (message?.refusal) throw new LlmError("refused");
+  try {
+    return JSON.parse(message?.content);
+  } catch {
+    throw new LlmError("invalid_response", "model returned invalid JSON");
+  }
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

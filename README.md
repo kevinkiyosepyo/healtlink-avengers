@@ -18,6 +18,20 @@ npm start          # build, then serve everything from one Express process
 - **Document preflight:** local checks across protocol, consent and onboarding text: mismatched study IDs or visit counts, outdated versions, open questions, each with its source line.
 - **Start-up timeline:** delay any start-up step (ethics review, contracts, EDC build…) and see whether first participant in moves.
 
+## Evidence deliberation (your-key mode)
+
+After the stakeholder scores, five agents deliberate: a clinical trialist, a participant-engagement scientist, a biostatistician, a regulatory and ethics reviewer, and a site-operations lead.
+
+1. The model plans literature queries and the metric to estimate.
+2. **Scholarly sources first:** OpenAlex, Europe PMC (including PubMed) and ClinicalTrials.gov, queried straight from your browser. Retracted papers and off-topic results are removed; the rest are ranked by a transparent credibility score (study design, peer review, citations per year, recency) and relevance.
+3. **Web search second:** OpenAI's web search, keeping only credible domains (agencies, journals, academic institutions). Excluded links are listed.
+4. Agents state positions with arithmetic and cited sources (`S1`, `S2`, …), rebut each other, and revise. A moderator writes the group decision. microfish also computes an independent confidence-weighted cross-check of the agents' estimates.
+5. The **provenance** tab shows every query, database response, source (with link, credibility breakdown and which claims cite it) and excluded link. Invalid citations are dropped and uncited claims flagged.
+
+## Cloud (optional)
+
+Sign in with Google, then turn on **cloud backup** in model & data to copy records and chats to encrypted DynamoDB storage under your account. Restore on another device or delete the cloud copy at any time. Deploying: see `infra/aws/README.md` (one container on App Runner, built from the `Dockerfile`).
+
 ## Modes
 
 - **Demo (default):** 12 illustrative agents and a local playback. No model is called and nothing leaves the browser.

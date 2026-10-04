@@ -39,7 +39,7 @@ export function createApp({ serveStatic = existsSync(DIST), env = process.env } 
 
   app.get("/api/health", (req, res) => res.json({ ok: true }));
   app.use((req, res, next) => {
-    if (["/api/account", "/api/openai", "/api/simulate"].includes(req.path)
+    if (["/api/account", "/api/openai", "/api/simulate", "/api/sync"].includes(req.path) || req.path.startsWith("/api/sync/")
       || req.path === "/api/auth" || req.path.startsWith("/api/auth/")) {
       return accountApi(req, res);
     }

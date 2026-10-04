@@ -1,7 +1,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
 export function useResearcherAccount() {
-  const account = reactive({ loading: true, configured: false, providers: { google: false, chatgpt: false }, user: null, openaiConnected: false })
+  const account = reactive({ loading: true, configured: false, providers: { google: false, chatgpt: false }, user: null, openaiConnected: false, cloudSync: false })
   const busy = ref(false)
   const error = ref('')
   const ready = computed(() => Boolean(account.user && account.openaiConnected))
@@ -22,12 +22,12 @@ export function useResearcherAccount() {
     try {
       const result = await request('/api/account')
       if (generation !== refreshGeneration) return
-      Object.assign(account, { configured: result.configured === true, providers: result.providers || { google: result.configured === true, chatgpt: false }, user: result.user || null, openaiConnected: result.openaiConnected === true })
+      Object.assign(account, { configured: result.configured === true, providers: result.providers || { google: result.configured === true, chatgpt: false }, user: result.user || null, openaiConnected: result.openaiConnected === true, cloudSync: result.cloudSync === true })
       if (refreshError) error.value = ''
       refreshError = false
     } catch (cause) {
       if (generation !== refreshGeneration) return
-      Object.assign(account, { configured: false, providers: { google: false, chatgpt: false }, user: null, openaiConnected: false })
+      Object.assign(account, { configured: false, providers: { google: false, chatgpt: false }, user: null, openaiConnected: false, cloudSync: false })
       error.value = cause.name === 'TimeoutError' ? 'Account services took too long to respond. Please try again.' : cause.message
       refreshError = true
     } finally {

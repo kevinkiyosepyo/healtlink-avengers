@@ -3,6 +3,7 @@ import {
   API_KEY_PATTERN, HttpError, SESSION_SECONDS, json, keyCookie, readApiKey,
   readJson, requireSameOrigin, sealApiKey, settings,
 } from "./security.js";
+import { createSyncHandler, syncStoreFromEnv } from "./sync.js";
 
 const OPENAI_BASE = "https://api.openai.com/v1";
 const PERSPECTIVES = [
@@ -65,7 +66,8 @@ function extractText(data) {
   return text.slice(0, 5000);
 }
 
-export function createApiHandler({ env = process.env, fetchImpl = globalThis.fetch, authenticate = defaultAuthenticate } = {}) {
+export function createApiHandler({ env = process.env, fetchImpl = globalThis.fetch, authenticate = defaultAuthenticate, syncStore = syncStoreFromEnv(env) } = {}) {
+  const handleSync = createSyncHandler({ config: settings(env), store: syncStore, authenticate });
   return async function handleApiRequest(request) {
     const pathname = new URL(request.url).pathname.replace(/\/$/, "");
     const config = settings(env);
@@ -83,6 +85,7 @@ export function createApiHandler({ env = process.env, fetchImpl = globalThis.fet
           chatgptPlanAvailable: false,
           user: session ? { id: session.id, name: session.name, email: session.email, image: session.image, provider: session.provider || "google" } : null,
           openaiConnected: Boolean(connected),
+          cloudSync: Boolean(handleSync),
           model: config.model,
         });
       }
@@ -92,6 +95,10 @@ export function createApiHandler({ env = process.env, fetchImpl = globalThis.fet
         if (request.method === "POST") requireSameOrigin(request, config);
         if (/\/(signin|callback)\/chatgpt$/.test(pathname) && !config.chatgpt) throw new HttpError(503, "chatgpt_not_configured", "ChatGPT sign-in is awaiting OpenAI approval and setup for Microfish.");
         return await handleAuth(request, config);
+      }
+      if (pathname === "/api/sync" || pathname.startsWith("/api/sync/")) {
+        if (!handleSync) throw new HttpError(503, "sync_not_configured", "Cloud backup isn't configured on this server.");
+        return await handleSync(request);
       }
       if (!["/api/openai", "/api/simulate"].includes(pathname)) return json({ error: "This API route does not exist.", code: "not_found" }, 404);
       requireMethod(request, pathname === "/api/openai" ? ["POST", "DELETE"] : ["POST"]);

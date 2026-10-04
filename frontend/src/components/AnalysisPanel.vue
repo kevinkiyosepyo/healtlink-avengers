@@ -152,7 +152,7 @@ const time = computed(() => (props.record ? new Date(props.record.createdAt).toL
           </div>
         </div>
         <p v-if="record.analysis.redacted" class="analysis-note mono">explanations removed: moderation flagged the generated text.</p>
-        <p class="analysis-note mono">model estimates from general knowledge — uncited, confidence self-reported. verify before use.</p>
+        <p class="analysis-note mono">stance scores are quick model estimates (uncited, confidence self-reported). the evidence deliberation below argues it out against cited literature.</p>
       </template>
 
       <div v-if="record && status !== 'analyzing'" class="provenance">

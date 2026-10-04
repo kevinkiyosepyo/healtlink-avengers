@@ -8,7 +8,10 @@ const props = defineProps({
   research: { type: Object, required: true },
   // useResearcherAccount(): Google sign-in state and actions.
   account: { type: Object, required: true },
+  // useCloudSync(): opt-in backup of records and the workspace.
+  cloud: { type: Object, required: true },
 });
+const confirmRestore = ref(false);
 
 const confirmDelete = ref(false);
 const showKey = ref(false);
@@ -55,7 +58,31 @@ function onKeyInput() {
           <button v-if="account.account.providers.google" class="primary-btn" type="button" :disabled="account.busy.value" @click="account.google()">sign in with google</button>
           <p v-else class="hint">google sign-in isn't configured on this server. everything else works locally.</p>
         </template>
-        <p class="hint">signing in identifies you; your chats and records still stay in this browser.</p>
+        <template v-if="account.account.user">
+          <label v-if="cloud.available.value" class="check">
+            <input v-model="cloud.enabled.value" type="checkbox" />
+            <span>cloud backup <span class="mono faint">(opt-in · records and chats are copied to encrypted storage under your account)</span></span>
+          </label>
+          <p v-else class="hint">cloud backup isn't configured on this server.</p>
+          <div v-if="cloud.available.value" class="actions">
+            <StatusBadge
+              size="sm"
+              :status="cloud.state.value === 'error' ? 'error' : cloud.state.value === 'syncing' ? 'running' : cloud.active.value ? 'completed' : 'draft'"
+              :label="cloud.state.value === 'error' ? 'backup failed' : cloud.state.value === 'syncing' ? 'syncing' : cloud.active.value ? 'backed up' : 'off'"
+              :meta="cloud.lastSyncedAt.value ? cloud.lastSyncedAt.value.toLocaleTimeString() : ''"
+            />
+            <span class="spacer"></span>
+            <button v-if="!confirmRestore" class="ghost-btn mono" type="button" @click="confirmRestore = true">restore from cloud</button>
+            <template v-else>
+              <span class="mono faint">replaces this browser's chats</span>
+              <button class="ghost-btn mono" type="button" @click="confirmRestore = false">cancel</button>
+              <button class="danger-btn mono" type="button" @click="cloud.restore()">restore</button>
+            </template>
+            <button class="ghost-btn mono" type="button" @click="cloud.deleteCloudData()">delete cloud copy</button>
+          </div>
+          <p v-if="cloud.error.value" class="error">{{ cloud.error.value }}</p>
+        </template>
+        <p v-else class="hint">signing in identifies you. cloud backup is opt-in after sign-in; otherwise chats and records stay in this browser.</p>
         <p v-if="account.error.value" class="error">{{ account.error.value }}</p>
       </section>
 
@@ -114,13 +141,22 @@ function onKeyInput() {
             <input v-model.number="research.settings.seed" class="field mono" type="number" min="0" step="1" />
           </label>
         </div>
+        <label class="check">
+          <input v-model="research.settings.evidence" type="checkbox" />
+          <span>evidence deliberation <span class="mono faint">(5 agents debate openalex, europe pmc / pubmed and clinicaltrials.gov sources, then agree on a cited decision)</span></span>
+        </label>
+        <label class="check" :class="{ dim: !research.settings.evidence }">
+          <input v-model="research.settings.web" type="checkbox" :disabled="!research.settings.evidence" />
+          <span>add web search as a secondary source <span class="mono faint">(credible domains only; needs a model with web search)</span></span>
+        </label>
         <p class="hint">temperature 0 and a fixed seed make results as repeatable as openai allows. identical runs reuse the saved result; use "re-run fresh" to sample again.</p>
       </section>
 
       <section class="block privacy">
         <p class="label mono">where your data goes</p>
         <ul>
-          <li>chats, records and settings are stored only in this browser (indexeddb / localstorage). microfish has no server-side database.</li>
+          <li>chats, records and settings are stored in this browser (indexeddb / localstorage). only if you turn on <b>cloud backup</b> are they also copied to microfish's cloud storage (aws dynamodb, encrypted at rest, keyed to a salted hash of your account).</li>
+          <li v-if="research.settings.mode === 'openai' && research.settings.evidence">evidence deliberation sends short search queries (derived from your scenario by the model, not the full text) to openalex, europe pmc and clinicaltrials.gov.</li>
           <li v-if="research.settings.mode === 'openai'">your key and scenario go <b>directly from this browser to api.openai.com</b> — never through a microfish server. openai's api data policies apply.</li>
           <li>your key is never written to disk; "remember" keeps it only until this tab closes.</li>
           <li>deleting a chat deletes its records and cached results. semantic search runs locally.</li>
@@ -197,6 +233,9 @@ function onKeyInput() {
   gap: 8px;
   color: var(--body);
   font-size: 13px;
+}
+.check.dim {
+  opacity: 0.5;
 }
 .check input {
   accent-color: var(--accent);

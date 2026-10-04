@@ -17,6 +17,8 @@
   },
   "dependencies": {
     "@auth/core": "^0.41.3",
+    "@aws-sdk/client-dynamodb": "^3.1146.0",
+    "@aws-sdk/lib-dynamodb": "^3.1146.0",
     "jose": "^6.2.12"
   }
 }
