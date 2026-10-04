@@ -183,6 +183,15 @@ function trapSidebarFocus(event) {
 const menuId = ref(null);
 const composer = ref(null);
 const messageList = ref(null);
+const irbDetailsOpen = ref(false);
+let conversationScrollBeforeIRB = 0;
+async function toggleIRBDetails() {
+  if (!irbDetailsOpen.value) conversationScrollBeforeIRB = messageList.value?.scrollTop || 0;
+  irbDetailsOpen.value = !irbDetailsOpen.value;
+  await nextTick();
+  if (messageList.value) messageList.value.scrollTop = irbDetailsOpen.value ? 0 : conversationScrollBeforeIRB;
+}
+watch([activeId, simulationStorageKey], () => { irbDetailsOpen.value = false; conversationScrollBeforeIRB = 0; });
 const actionDialog = ref(null);
 const dialogAction = ref(null);
 const dialogSession = ref(null);
@@ -346,6 +355,7 @@ async function useStarter(prompt) {
 }
 async function submitRun() {
   if (!canSubmit.value) return;
+  irbDetailsOpen.value = false;
   if (runMode.value !== "demo" && (workspaceKind.value !== "personal" || !selectedProviderReady.value)) {
     navigate("login");
     return;
@@ -683,11 +693,13 @@ watch(
             </button>
           </nav>
         </div>
-        <section v-if="activeSession.context" class="simulation-context-bar" aria-label="Simulation setup">
-          <div><strong>{{ activeSession.context.university?.name || 'Study context' }}</strong><span>{{ activeSession.context.documents.length }} {{ activeSession.context.documents.length === 1 ? 'document' : 'documents' }}<template v-if="activeSession.context.transcript"> · Voice transcript</template><template v-if="activeSession.context.institution"> · {{ activeSession.context.institution.reviewers?.length || 0 }} reviewer profiles</template></span></div>
-          <button type="button" class="secondary-button" :disabled="isRunning || preparingInstitution" @click="editSetup">Review setup & sources</button>
+        <section v-if="activeSession.context || (workspaceKind === 'personal' && simulationUniversity)" class="simulation-context-bar" aria-label="Simulation setup">
+          <div class="simulation-context-summary"><strong>{{ activeSession.context?.university?.name || (workspaceKind === 'personal' ? simulationUniversity?.name : null) || 'Study context' }}</strong><span>{{ activeSession.context?.documents.length || 0 }} {{ activeSession.context?.documents.length === 1 ? 'document' : 'documents' }}<template v-if="activeSession.context?.transcript"> · Voice transcript</template><template v-if="workspaceKind === 'personal' && simulationInstitution"> · {{ simulationInstitution.reviewers?.length || 0 }} simulated reviewers</template><template v-if="workspaceKind === 'personal' && simulationInstitutionState === 'loading'"> · Checking sources…</template></span></div>
+          <div class="simulation-context-actions">
+            <button v-if="workspaceKind === 'personal' && simulationUniversity && activeView !== 'Graph'" type="button" class="secondary-button irb-details-toggle" :aria-expanded="irbDetailsOpen" aria-controls="simulation-irb-details" @click="toggleIRBDetails">{{ irbDetailsOpen ? 'Hide IRB details' : 'Show IRB details' }}<AppIcon name="chevron" :size="13" :class="{ expanded: irbDetailsOpen }" /></button>
+            <button type="button" class="secondary-button" :disabled="isRunning || preparingInstitution" @click="editSetup">Review setup & sources</button>
+          </div>
         </section>
-        <UniversityIRBPanel v-if="workspaceKind === 'personal' && simulationUniversity" class="workspace-irb-panel" compact :university="simulationUniversity" :profile="simulationInstitution" :state="simulationInstitutionState" :error="sharedInstitutionUniversityMatches && !activeSession.context?.institution ? institutionError : ''" :provider="institutionProvider" @refresh="editSetup" />
         <div v-if="storageWarning" class="storage-warning" role="alert">
           <AppIcon name="info" :size="17" />{{ storageWarning }}
         </div>
@@ -701,6 +713,7 @@ watch(
             aria-label="Simulation chat"
           >
             <div ref="messageList" class="message-scroll">
+              <UniversityIRBPanel v-if="workspaceKind === 'personal' && simulationUniversity" v-show="irbDetailsOpen" id="simulation-irb-details" class="workspace-irb-panel" compact :university="simulationUniversity" :profile="simulationInstitution" :state="simulationInstitutionState" :error="sharedInstitutionUniversityMatches && !activeSession.context?.institution ? institutionError : ''" :provider="institutionProvider" @refresh="editSetup" />
               <div v-if="!activeSession.messages.length" class="welcome">
                 <h1>{{ workspaceKind === 'personal' ? 'Prepare for your IRB review.' : 'Start with a question.' }}</h1>
                 <p class="welcome-copy">
@@ -1000,6 +1013,15 @@ watch(
 </template>
 
 <style scoped>
-.workspace-irb-panel { margin:0 24px 14px; max-height:270px; overflow-y:auto; flex-shrink:0; }
-@media (max-width:760px) { .workspace-irb-panel { margin:0 14px 12px; max-height:190px; } }
+.workspace-irb-panel { margin:16px 0 24px; }
+.simulation-context-bar { flex-shrink:0; gap:10px 16px; padding:10px 20px; }
+.simulation-context-bar > .simulation-context-actions { display:flex; flex:0 1 auto; flex-wrap:wrap; align-items:center; gap:8px; }
+.irb-details-toggle { display:inline-flex; align-items:center; gap:6px; }
+.irb-details-toggle svg { transform:rotate(90deg); }
+.irb-details-toggle svg.expanded { transform:rotate(-90deg); }
+@media (max-width:760px) {
+  .simulation-context-bar { padding:10px 16px; }
+  .simulation-context-bar > .simulation-context-actions { flex:1 1 100%; }
+  .simulation-context-actions button { flex:1; padding-inline:8px; font-size:.7rem; }
+}
 </style>
