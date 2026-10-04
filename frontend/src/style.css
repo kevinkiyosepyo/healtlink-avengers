@@ -169,55 +169,20 @@ textarea.mono,
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
-/* Small status dot; matches StatusBadge (Vercel-style halo, ripple when running). */
-.dot {
-  --tone: var(--faint);
-  position: relative;
-  width: 6px;
-  height: 6px;
-  flex-shrink: 0;
-  border-radius: 999px;
-  background: var(--tone);
-  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--tone) 16%, transparent);
-}
-.dot.running {
-  --tone: var(--accent);
-}
-.dot.running::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: var(--tone);
-  animation: dot-ripple 1.8s var(--ease) infinite;
-}
-.dot.completed {
-  --tone: var(--teal);
-}
-.dot.stopped {
-  --tone: var(--muted);
-}
-@keyframes dot-ripple {
-  from {
-    opacity: 0.55;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: scale(2.6);
-  }
-}
-.pill {
+/* Raycast/Linear-style tag: small radius, hairline, no dot. */
+.tag {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 22px;
-  padding: 0 8px;
+  height: 20px;
+  padding: 0 7px;
   border: 1px solid var(--hairline);
-  border-radius: 999px;
+  border-radius: 5px;
   color: var(--muted);
+  font-size: 11px;
   white-space: nowrap;
 }
+
 .glyph-link {
   display: inline-flex;
   align-items: baseline;
@@ -418,8 +383,14 @@ textarea.mono,
   color: var(--faint);
 }
 .sidebar-footer p {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
   margin: 0;
   line-height: 1.5;
+}
+.sidebar-footer p .status-icon {
+  margin-top: 3px;
 }
 .identity {
   display: flex;
@@ -749,7 +720,7 @@ textarea.mono,
 .background-hint {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   margin-bottom: 8px;
   color: var(--muted);
 }
@@ -1021,7 +992,7 @@ textarea.mono,
 .mode-chip {
   padding: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: 6px;
   background: none;
 }
 .mode-chip:hover .status {
@@ -1030,9 +1001,9 @@ textarea.mono,
 .beta-pill {
   display: inline-block;
   margin-right: 8px;
-  padding: 1px 7px;
+  padding: 1px 6px;
   border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--hairline));
-  border-radius: 999px;
+  border-radius: 4px;
   color: var(--accent);
 }
 .toolkit {
@@ -1281,4 +1252,41 @@ button.identity:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ---------- dictation ---------- */
+.composer-toolbar .voice-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mic-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+  margin-right: 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  transition: color 120ms var(--ease), border-color 120ms var(--ease), background 120ms var(--ease);
+}
+.mic-btn:hover {
+  color: var(--ink);
+}
+.mic-btn.live {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--hairline));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+.voice-note {
+  margin: 6px 0 0;
+  color: var(--faint);
+  font-size: 11px;
 }

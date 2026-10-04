@@ -2,11 +2,13 @@
 // Consensus, debate and provenance for one run's evidence deliberation.
 // Citation chips jump to the source's row in the provenance tab.
 import { computed, nextTick, ref } from "vue";
-import { Download, ExternalLink, RotateCcw } from "@lucide/vue";
+import { Download, ExternalLink, RotateCcw, Volume2, VolumeX } from "@lucide/vue";
 import StatusBadge from "./StatusBadge.vue";
+import StatusIcon from "./StatusIcon.vue";
 import { ERROR_COPY } from "../composables/useResearch.js";
 import { csvCell } from "../lib/records.js";
 import { downloadText, stamp } from "../lib/download.js";
+import { consensusScript, speak, stopSpeaking } from "../lib/voice.js";
 
 const props = defineProps({
   deliberation: { type: Object, default: null },
@@ -15,8 +17,8 @@ const props = defineProps({
 });
 const emit = defineEmits(["deliberate"]);
 
-const STAGES = ["planning", "retrieving", "library", "web", "opening", "rebuttal", "consensus"];
-const STAGE_LABELS = { planning: "plan", retrieving: "scholarly search", library: "your library", web: "web (secondary)", opening: "opening positions", rebuttal: "rebuttals", consensus: "consensus" };
+const STAGES = ["planning", "retrieving", "opening", "rebuttal", "consensus"];
+const STAGE_LABELS = { planning: "plan", retrieving: "evidence (scholarly · library · web, in parallel)", opening: "opening positions", rebuttal: "rebuttals", consensus: "consensus" };
 const RECOMMENDATION = {
   proceed: { status: "completed", label: "proceed" },
   proceed_with_changes: { status: "running", label: "proceed with changes" },
@@ -26,6 +28,15 @@ const RECOMMENDATION = {
 const STANCE = { agree: "completed", partly: "running", disagree: "error" };
 
 const tab = ref("consensus");
+const speaking = ref(false);
+function toggleListen() {
+  if (speaking.value) {
+    stopSpeaking();
+    speaking.value = false;
+  } else {
+    speaking.value = speak(consensusScript(d.value), { onEnd: () => (speaking.value = false) });
+  }
+}
 const highlighted = ref(null);
 const openReasons = ref(new Set());
 const d = computed(() => props.deliberation);
@@ -75,6 +86,7 @@ function exportSources() {
       <StatusBadge status="running" label="deliberating" :meta="progress.detail" />
       <ol class="stepper mono">
         <li v-for="stage in STAGES" :key="stage" :class="{ done: STAGES.indexOf(stage) < STAGES.indexOf(progress.stage), now: stage === progress.stage }">
+          <StatusIcon :status="STAGES.indexOf(stage) < STAGES.indexOf(progress.stage) ? 'completed' : stage === progress.stage ? 'running' : 'draft'" :size="12" />
           {{ STAGE_LABELS[stage] }}
         </li>
       </ol>
@@ -99,7 +111,12 @@ function exportSources() {
       <div v-if="tab === 'consensus'" class="ev-body">
         <div class="ev-head">
           <StatusBadge variant="chip" v-bind="RECOMMENDATION[d.consensus.recommendation]" :meta="[`confidence ${Math.round(d.consensus.confidence * 100)}%`]" />
-          <span class="mono faint">{{ d.panel.length }} agents · {{ d.pack.length }} sources · {{ (d.latencyMs / 1000).toFixed(0) }}s</span>
+          <span class="ev-head-right">
+            <span class="mono faint">{{ d.panel.length }} agents · {{ d.pack.length }} sources · {{ (d.latencyMs / 1000).toFixed(0) }}s</span>
+            <button class="mini-btn" type="button" :aria-pressed="speaking" @click="toggleListen">
+              <VolumeX v-if="speaking" :size="12" /><Volume2 v-else :size="12" /> {{ speaking ? "stop" : "listen" }}
+            </button>
+          </span>
         </div>
         <p class="decision">{{ d.consensus.decision }}</p>
 
@@ -265,22 +282,16 @@ function exportSources() {
   list-style: none;
   color: var(--faint);
 }
-.stepper li::before {
-  content: "○ ";
+.stepper li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .stepper li.done {
   color: var(--muted);
 }
-.stepper li.done::before {
-  content: "● ";
-  color: var(--teal);
-}
 .stepper li.now {
   color: var(--ink);
-}
-.stepper li.now::before {
-  content: "◐ ";
-  color: var(--accent);
 }
 .ev-tabs {
   margin-bottom: 10px;
@@ -298,6 +309,11 @@ function exportSources() {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+.ev-head-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 .decision {
   margin: 0;
@@ -348,7 +364,7 @@ function exportSources() {
   margin-left: 4px;
   padding: 0 6px;
   border: 1px solid color-mix(in srgb, var(--kg-site) 45%, var(--hairline));
-  border-radius: 999px;
+  border-radius: 4px;
   background: color-mix(in srgb, var(--kg-site) 12%, transparent);
   color: var(--ink);
   font-size: 10.5px;

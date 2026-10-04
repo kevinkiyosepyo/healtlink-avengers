@@ -116,25 +116,21 @@ defineProps({
   color: var(--faint);
 }
 
-/* running: a coral activity ring pulses outward, staggered by index */
+/* running: a thin accent arc orbits the node (same language as StatusIcon) */
 .is-running .kg-core::after {
   content: "";
   position: absolute;
-  inset: -2px;
-  border: 1px solid var(--accent);
+  inset: -4px;
+  border: 1.5px solid transparent;
+  border-top-color: var(--accent);
   border-radius: 999px;
-  animation: kg-pulse 1.8s var(--ease) infinite;
-  animation-delay: var(--stagger);
+  animation: kg-orbit 1.4s linear infinite;
+  animation-delay: calc(var(--stagger) * -1);
   pointer-events: none;
 }
-@keyframes kg-pulse {
-  from {
-    opacity: 0.7;
-    transform: scale(1);
-  }
+@keyframes kg-orbit {
   to {
-    opacity: 0;
-    transform: scale(1.7);
+    transform: rotate(360deg);
   }
 }
 .is-stopped {

@@ -1,12 +1,14 @@
 <script setup>
-// Status signature modeled on Vercel's deployment states: a dot with a soft
-// halo, a sans label, and optional mono metadata (progress, duration, counts).
+// Status signature: a geometric StatusIcon (Linear-style states), a sans
+// label, and optional mono metadata (progress, duration, counts).
 import { computed } from "vue";
+import StatusIcon from "./StatusIcon.vue";
 
 const props = defineProps({
   status: { type: String, default: "draft" }, // running | completed | stopped | draft | error
   label: { type: String, default: "" },
   meta: { type: [String, Array], default: "" },
+  progress: { type: Number, default: null }, // fills the running icon when known
   variant: { type: String, default: "inline" }, // inline | chip
   size: { type: String, default: "md" }, // sm | md
 });
@@ -17,8 +19,8 @@ const metaParts = computed(() => (Array.isArray(props.meta) ? props.meta : [prop
 </script>
 
 <template>
-  <span class="status" :class="[`is-${status}`, `v-${variant}`, `s-${size}`]">
-    <span class="status-dot" aria-hidden="true"></span>
+  <span class="status" :class="[`v-${variant}`, `s-${size}`]">
+    <StatusIcon :status="status" :progress="progress" :size="size === 'sm' ? 12 : 14" />
     <span class="status-label">{{ text }}</span>
     <span v-for="(part, index) in metaParts" :key="index" class="status-meta">{{ part }}</span>
   </span>
@@ -26,68 +28,18 @@ const metaParts = computed(() => (Array.isArray(props.meta) ? props.meta : [prop
 
 <style scoped>
 .status {
-  --tone: var(--faint);
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   min-width: 0;
   white-space: nowrap;
 }
-.is-running {
-  --tone: var(--accent);
-}
-.is-completed {
-  --tone: var(--teal);
-}
-.is-stopped {
-  --tone: var(--muted);
-}
-.is-error {
-  --tone: var(--danger);
-}
 .v-chip {
   height: 24px;
-  padding: 0 10px 0 9px;
+  padding: 0 9px 0 7px;
   border: 1px solid var(--hairline);
-  border-radius: 999px;
+  border-radius: 6px;
   background: var(--surface);
-}
-.status-dot {
-  position: relative;
-  flex-shrink: 0;
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--tone);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 18%, transparent);
-}
-.s-sm .status-dot {
-  width: 6px;
-  height: 6px;
-  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--tone) 16%, transparent);
-}
-.is-draft .status-dot {
-  background: transparent;
-  box-shadow: inset 0 0 0 1.5px var(--faint);
-}
-/* running: a halo ripples outward (no blinking) */
-.is-running .status-dot::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: var(--tone);
-  animation: status-ripple 1.8s cubic-bezier(0.2, 0.7, 0.2, 1) infinite;
-}
-@keyframes status-ripple {
-  from {
-    opacity: 0.55;
-    transform: scale(1);
-  }
-  to {
-    opacity: 0;
-    transform: scale(2.6);
-  }
 }
 .status-label {
   color: var(--ink);
@@ -110,12 +62,7 @@ const metaParts = computed(() => (Array.isArray(props.meta) ? props.meta : [prop
 }
 .status-meta::before {
   content: "·";
-  margin-right: 8px;
+  margin-right: 7px;
   color: color-mix(in srgb, var(--faint) 60%, transparent);
-}
-@media (prefers-reduced-motion: reduce) {
-  .is-running .status-dot::after {
-    animation: none;
-  }
 }
 </style>

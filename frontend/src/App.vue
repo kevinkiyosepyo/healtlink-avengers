@@ -1,10 +1,11 @@
 <script setup>
 import { computed, defineAsyncComponent, h, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { ArrowUp, PanelLeft, Square } from "@lucide/vue";
+import { ArrowUp, Mic, MicOff, PanelLeft, Square } from "@lucide/vue";
 import SidebarPanel from "./components/SidebarPanel.vue";
 import BootScreen from "./components/fx/BootScreen.vue";
 import SampleRack from "./components/fx/SampleRack.vue";
 import StatusBadge from "./components/StatusBadge.vue";
+import StatusIcon from "./components/StatusIcon.vue";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +31,8 @@ import { BLOCK_REASONS } from "./lib/guardrails.js";
 import { useSimulationWorkspace } from "./composables/useSimulationWorkspace.js";
 import { useResearcherAccount } from "./composables/useResearcherAccount.js";
 import { useCloudSync } from "./composables/useCloudSync.js";
+import { useVoice } from "./composables/useVoice.js";
+import { appendSegment, cleanTranscript } from "./lib/voice.js";
 import { PROMPT_LIMIT, TITLE_LIMIT } from "./lib/simulationWorkspace.js";
 
 // Views load on demand; if a chunk can't be fetched (e.g. a stale tab after a
@@ -219,6 +222,18 @@ const canSubmit = computed(
 const research = useResearch(sessions);
 const account = useResearcherAccount();
 const cloud = useCloudSync({ research, account, sessions });
+
+// Voice dictation: talk continuously; segments are cleaned and appended to the
+// draft, and saying "run it" submits (hands-free, e.g. on the go).
+const voice = useVoice({ getApiKey: () => (research.settings.mode === "openai" && research.keyStatus.value === "valid" ? research.apiKey.value.trim() : "") });
+function onVoiceSegment(raw) {
+  const session = activeSession.value;
+  if (!session) return;
+  const { text, command } = cleanTranscript(raw);
+  session.draft = appendSegment(session.draft, text);
+  if (command === "send") nextTick(submitRun);
+}
+const toggleVoice = () => voice.toggle(onVoiceSegment);
 const settingsOpen = ref(false);
 watch(settingsOpen, (open) => {
   if (open) settingsMounted.value = true;
@@ -402,6 +417,11 @@ function globalKeydown(event) {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
     event.preventDefault();
     paletteOpen.value = !paletteOpen.value;
+  }
+  // ⌘/Ctrl + Shift + Space toggles dictation.
+  if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.code === "Space" && currentPage.value === "simulations") {
+    event.preventDefault();
+    toggleVoice();
   }
 }
 watch(currentPage, async (page) => {
@@ -644,6 +664,7 @@ watch(
                     <div class="run-head">
                       <StatusBadge
                         :status="runForMessage(message).status"
+                        :progress="runForMessage(message).progress"
                         :meta="runMeta(runForMessage(message))"
                       />
                       <span class="pct mono">run {{ runIndex(runForMessage(message)) }}</span>
@@ -696,7 +717,7 @@ watch(
 
           <div class="column composer-area">
             <div v-if="isRunning" class="background-hint mono" role="status">
-              <span class="dot running"></span>this demo keeps running when you switch chats
+              <StatusIcon status="running" :size="12" />this demo keeps running when you switch chats
             </div>
             <form class="composer" @submit.prevent="submitRun">
               <label class="sr-only" for="simulation-prompt">Simulation question</label>
@@ -716,9 +737,25 @@ watch(
                 @keydown="composerKeydown"
               ></textarea>
               <div class="composer-toolbar mono">
-                <span v-if="checking" role="status">checking scope…</span>
+                <span v-if="voice.listening.value" class="voice-status" role="status">
+                  <StatusIcon status="running" :size="12" />
+                  {{ voice.pending.value ? "transcribing…" : voice.interim.value || "listening" }} · say “run it” to send
+                </span>
+                <span v-else-if="checking" role="status">checking scope…</span>
                 <span v-else-if="research.settings.mode === 'openai'">sent to openai with your key · trial &amp; health scenarios only</span>
                 <span v-else>12 demo agents · trial &amp; health scenarios only</span>
+                <button
+                  v-if="voice.supported"
+                  class="mic-btn"
+                  :class="{ live: voice.listening.value }"
+                  type="button"
+                  :aria-pressed="voice.listening.value"
+                  :aria-label="voice.listening.value ? 'Stop dictation' : 'Dictate (⌘⇧Space)'"
+                  :title="voice.listening.value ? 'stop dictation' : 'dictate · ⌘⇧space'"
+                  @click="toggleVoice"
+                >
+                  <MicOff v-if="voice.listening.value" :size="15" /><Mic v-else :size="15" />
+                </button>
                 <button
                   v-if="isRunning"
                   class="stop-btn mono"
@@ -739,6 +776,8 @@ watch(
               </div>
             </form>
             <p v-if="submitError" class="submit-error" role="alert">{{ submitError }}</p>
+            <p v-if="voice.error.value" class="submit-error" role="alert">{{ voice.error.value }}</p>
+            <p v-else-if="voice.listening.value && voice.engine.value === 'browser'" class="voice-note mono">using your browser's speech service (audio may go to google or apple). add an openai key for private-to-your-key transcription.</p>
             <div class="composer-hints mono">
               <span class="keys">enter to run · shift+enter for newline</span>
               <span>{{ research.settings.mode === "openai" ? "model estimates · not medical advice" : "demo runs · not medical advice" }}</span>
@@ -804,7 +843,7 @@ watch(
                 :value="session.id"
                 @select="selectChat(session.id)"
               >
-                <span class="dot" :class="session.runs.at(-1)?.status"></span>
+                <StatusIcon :status="effectiveStatus(session.runs.at(-1))" :size="12" />
                 <span class="truncate">{{ session.title }}</span>
                 <span v-if="paletteSimilarIds.has(session.id)" class="similar-tag mono">≈ similar</span>
               </CommandItem>
@@ -814,7 +853,7 @@ watch(
             </p>
           </CommandList>
           <div class="palette-foot mono">
-            <span class="dot" :class="{ running: semantic.status.value === 'loading', completed: semantic.status.value === 'ready' }"></span>
+            <StatusIcon :status="{ loading: 'running', ready: 'completed', unavailable: 'stopped' }[semantic.status.value] ?? 'draft'" :size="12" />
             {{ semanticLabel }}
           </div>
         </Command>
