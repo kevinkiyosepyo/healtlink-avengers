@@ -10,7 +10,7 @@ Lookahead helps researchers prepare a study, inspect its dependencies, and explo
 
 One workspace serves both light and dark appearances. Theme changes preserve navigation, chats, drafts, provider connections, and active runs. The older `/research.html` link opens this same app. A brief, dismissible 1.35-second introduction appears once per browser session and respects reduced motion.
 
-- **Sample case:** an interactive REST-101 knowledge graph with 300 fictional agents: 60 roles viewed through five review lenses, including IRB perspectives. Its walkthrough is scripted local playback. No sign-in or university onboarding is required.
+- **Sample case:** an interactive REST-101 knowledge graph with 150 fictional agents: 30 roles viewed through five review lenses, including IRB perspectives. Its scripted walkthrough opens at 140/150 reviewed and plays the remaining ten reviews. The prepared sample report and final conclusions are available immediately, including during replay. No sign-in or university onboarding is required.
 - **Your research:** Google sign-in, university selection, and optional OpenAI or Anthropic connections stored in encrypted, session-bound server cookies.
 - **New simulation:** a centered dialog for study context, PDF/Markdown/TXT/ZIP imports, and editable voice dictation. Multiple simulation chats can run concurrently.
 - **University IRB preview:** a Workspace entry below Document preflight. It checks audited public university sources and offers clearly labeled scripted example questions without an account or API key.
