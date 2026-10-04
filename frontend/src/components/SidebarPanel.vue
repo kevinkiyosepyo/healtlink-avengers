@@ -10,6 +10,7 @@ import {
 import { Input } from "@/components/ui/input";
 import StatusBadge from "./StatusBadge.vue";
 import BrandMark from "./BrandMark.vue";
+import StatusIcon from "./StatusIcon.vue";
 
 const props = defineProps({
   sessions: { type: Array, required: true },
@@ -134,14 +135,13 @@ const isMac =
 
     <div class="sidebar-footer mono">
       <p v-if="runningCount">
-        <span class="dot running" style="display: inline-block; margin-right: 6px"></span
-        >{{ runningCount }} running — other chats keep going
+        <StatusIcon status="running" :size="12" /><span>{{ runningCount }} running — other chats keep going</span>
       </p>
       <p v-else>room for every what-if — runs continue in parallel</p>
       <button class="identity" @click="emit('settings')">
         <span class="avatar">{{ user ? (user.name || user.email || "r").charAt(0).toLowerCase() : "m" }}</span>
         <span class="identity-name">{{ user ? user.name || user.email : "my workspace" }}</span>
-        <span class="pill mono" style="margin-left: auto">{{ user ? "signed in" : "sign in" }}</span>
+        <span class="tag mono" style="margin-left: auto">{{ user ? "signed in" : "sign in" }}</span>
       </button>
     </div>
   </aside>

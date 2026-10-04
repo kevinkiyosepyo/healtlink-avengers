@@ -436,7 +436,7 @@ const stateLabel = { idle: "not reached", running: "active", done: "explored", s
   height: 22px;
   padding: 0 8px;
   border: 1px solid var(--hairline);
-  border-radius: 999px;
+  border-radius: 6px;
   background: color-mix(in srgb, var(--canvas) 85%, transparent);
   color: var(--muted);
   transition:
@@ -471,7 +471,7 @@ const stateLabel = { idle: "not reached", running: "active", done: "explored", s
   height: 22px;
   padding: 0 8px;
   border: 1px solid var(--hairline);
-  border-radius: 999px;
+  border-radius: 6px;
   background: color-mix(in srgb, var(--canvas) 85%, transparent);
   color: var(--muted);
 }

@@ -18,7 +18,8 @@ export function createApp({ serveStatic = existsSync(DIST), env = process.env } 
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "no-referrer",
       "X-Frame-Options": "DENY",
-      "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+      // Microphone only for this origin: voice dictation.
+      "Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
       // Only this origin, the OpenAI API, and the embedding model CDN.
       "Content-Security-Policy": [
         "default-src 'self'",

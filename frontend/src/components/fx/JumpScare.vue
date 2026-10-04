@@ -1,12 +1,14 @@
 <script setup>
-// Hidden easter egg. Trigger (outside text fields): ↑ ↑ ↓ ↓ then K I N G.
-// A sequence, not a chord, so it can't collide with OS/browser shortcuts.
+// Hidden easter egg. Trigger: ↑ ↑ ↓ ↓ ← → ← → (each press within 2.5s).
+// Arrows only, so it works even while the composer has focus without typing
+// anything; a sequence, not a chord, so it can't collide with OS shortcuts.
 // Local only: an original uncanny vector silhouette, no flashing (photosensitivity),
 // short synthesized sting, dismiss with any key/click; reduced motion = no zoom or sound.
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { prefersReducedMotion } from "../../composables/useMotion.js";
 
-const SEQUENCE = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "k", "i", "n", "g"];
+const SEQUENCE = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight"];
+const MODIFIERS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock"]);
 const visible = ref(false);
 let position = 0;
 let lastKey = 0;
@@ -52,9 +54,13 @@ function onKeydown(event) {
     hide();
     return;
   }
-  const target = event.target;
-  if (target?.closest?.("input, textarea, select, [contenteditable='true']")) return;
-  const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+  if (MODIFIERS.has(event.key)) return;
+  // Arrows navigate menus and dialogs; don't hijack them there.
+  if (document.querySelector("[role='dialog'], [role='menu'], [role='listbox']")) {
+    position = 0;
+    return;
+  }
+  const key = event.ctrlKey || event.metaKey || event.altKey ? null : event.key;
   const now = Date.now();
   if (now - lastKey > 2500) position = 0;
   lastKey = now;
@@ -68,9 +74,10 @@ function onKeydown(event) {
     position = key === SEQUENCE[0] ? 1 : 0;
   }
 }
-onMounted(() => window.addEventListener("keydown", onKeydown));
+// Capture phase: components that stop arrow-key propagation can't swallow it.
+onMounted(() => window.addEventListener("keydown", onKeydown, true));
 onBeforeUnmount(() => {
-  window.removeEventListener("keydown", onKeydown);
+  window.removeEventListener("keydown", onKeydown, true);
   clearTimeout(hideTimer);
 });
 </script>

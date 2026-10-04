@@ -67,7 +67,7 @@ No shadows in-app. Depth = surface step + hairline (`canvas → surface → surf
 - **Links:** prefixed with `⮡` in mono, `--muted`. On hover the glyph shifts 2px right/down and the text goes `--ink`. Used for: follow-up suggestions, "open in graph", docs, source links.
 - **Composer:** `surface-raised`, hairline, 12px radius, autosizing textarea, mono hint row below (`enter to run · shift+enter for newline`). Send is a 32px accent icon button. While running it becomes `stop` (danger ghost).
 - **Message blocks:** no bubbles. User = `--ink`, right-aligned mono label `you`. Model/run output = `--body`, left, with a mono run header `run 02 · 24s · 12 agents`. Hairline between runs.
-- **Status signature** (`StatusBadge`, modeled on Vercel's deployment states): 8px dot with a soft 3px halo in the state's tone, sans 12.5px label, then mono metadata separated by faint middots, e.g. `● running · 42% · 8s`, `● ready · 24s · 12 agents`, `● stopped · at 61% · 14s`. Running ripples the halo outward (no blinking). Draft is a hollow ring. Tones: running = accent, ready = teal, stopped = muted, blocked = danger. Chip variant (hairline border, `surface` fill) for the topbar and graph header; small variant in sidebar rows.
+- **Status signature** (`StatusBadge` + `StatusIcon`, modeled on Linear's issue-state icons and Raycast's tags): a 14px geometric icon, never a glowing dot. **draft** is a dashed circle; **running** is a faint ring that fills like a pie with real progress, or a single rotating arc when progress is unknown; **ready** is a solid teal circle with a check; **stopped** is a ring with a small square; **blocked** is a solid danger circle with a cross. All are hairline strokes with no halo, ripple or pulse. The icon is followed by a sans 12.5px label and mono metadata separated by faint middots, e.g. `◔ running · 42% · 8s`. The chip variant is a 6px-radius rectangle with a hairline and `surface` fill. Tags (`.tag`, the `beta` mark, citation chips) use 4–6px radii, never pills.
 - **Sample rack (loading):** while a run is active, five sample tubes fill in sequence with progress in the muted `--kg-*` colors, with bubbles in the active tube. A small coral "sus" lookahead (an original character) peeks over the rack every 3.5–9s, glances around and ducks back. There's no peeking under reduced motion.
 - **View switcher** (chat / graph / split): mono segmented control, lowercase, 28px, active = `surface-hover` + `--ink`.
 - **Dialogs and menus:** `surface-raised`, hairline, 12px radius, 150ms fade+scale(.98→1).
@@ -95,13 +95,17 @@ No shadows in-app. Depth = surface step + hairline (`canvas → surface → surf
 - Tool page (`#/library`): a dashed dropzone (accent tint on hover/drag), an indexing badge with a 2px progress bar, and paste-text fields | a document list (name, type, pages, passages, date, delete) and a "test retrieval" box showing passages with document · page · line · similarity in `.code-text` (names keep their case).
 - In the evidence panel, library passages show a "your source · not externally verified" badge instead of a credibility score, plus page/line/char location; the pipeline gains a "your source library" step stating that only matched excerpts were sent.
 
+## 6f. Voice
+- Composer: a 32px hairline mic button left of send. When live it gets an accent outline and tint, and the toolbar copy becomes a running `StatusIcon` + "listening · say “run it” to send" (or "transcribing…"). Browser-engine fallback shows a one-line mono disclosure under the composer.
+- The consensus header has a `listen` / `stop` mini button that reads the decision aloud.
+
 ## 7. Graph view: knowledge graph (Vue Flow + d3-force)
 - Canvas `--canvas` with a faint dot grid. Layout comes from d3-force (link, charge, collide, center). Dragging a node pins it while neighbors follow, and on release it settles back.
 - **Category colors** (muted and warm-leaning, never brighter than the accent; separate light/dark values): `--kg-core` coral (the protocol change), `--kg-participant` sage, `--kg-site` slate blue, `--kg-oversight` ochre, `--kg-sponsor` taupe, `--kg-data` mauve. Coral as an *activity* signal belongs only to running state.
 - **Search and fullscreen:** a mono "find stakeholder" field highlights the first match (Enter inspects, Esc clears). A fullscreen control sits under zoom/fit.
 - **Node:** circle sized by degree (r = 9 + 2.2 × links), 1.5px category ring, fill = category at 22% over canvas. Label below in Geist 11.5. On hover a mono meta line appears (`provider · 4 links`).
   - *idle* (not reached by the run): dashed ghost ring, faint label.
-  - *running:* full category fill plus a coral ring pulsing outward (1.8s, staggered).
+  - *running:* full category fill plus a thin accent arc orbiting the node (1.4s linear, staggered). No pulse or glow.
   - *done:* full category fill, static.
   - *stopped:* fades to 45% over 400ms.
 - **Edges:** straight, 1px `--kg-edge`. Edges between reached nodes get stronger, and while running they show a slow coral dash flow. Relation labels ("reports to", "bills") appear in mono only on the focused node's edges.
@@ -126,6 +130,8 @@ Principle: quick and purposeful, transform and opacity only. Easing `cubic-bezie
 ## 10. Do / Don't
 **Do:** keep one accent; use mono for anything machine-like; let hairlines do the structure; animate state changes, not decoration; keep transcript contrast ≥ 4.5:1 in both themes.
 **Don't:** use shadows or gradients in the app chrome; use bubbles; animate the transcript text; use a hero layout or big CTAs; introduce a second accent; ship motion that ignores reduced-motion.
+
+- Status: never glowing, haloed or pulsing dots; use `StatusIcon`.
 
 ## 11. Implementation notes
 - Tokens live as CSS variables on `:root` / `[data-theme]` in `src/style.css`, mapped into shadcn-vue's expected variables (`--background`, `--foreground`, `--primary`, `--border`, `--ring`, …).
