@@ -1,6 +1,9 @@
-/* The workspace intentionally stays white, including when the system uses dark mode. */
+/* Shared white-and-blue palette across the research workspace. */
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, sans-serif;
+  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --font-data: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-body);
   color: var(--ui-text);
   background: var(--ui-canvas);
   color-scheme: only light;
@@ -96,11 +99,11 @@ p {
   overflow: hidden;
 }
 .sidebar {
-  width: 280px;
+  width: 250px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  padding: 24px 14px 0;
+  padding: 28px 16px 0;
   overflow-y: auto;
   background: var(--ui-surface-alt);
   border-right: 1px solid var(--ui-border);
@@ -108,8 +111,8 @@ p {
 .sidebar-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 0 10px 28px;
+  gap: 9px;
+  padding: 0 8px 32px;
 }
 .brand-symbol {
   display: grid;
@@ -118,9 +121,10 @@ p {
 }
 .brand {
   color: var(--ui-text);
-  font-size: 1.6875rem;
-  letter-spacing: -1.3px;
-  font-weight: 680;
+  font-family: var(--font-display);
+  font-size: 1.875rem;
+  letter-spacing: -1.2px;
+  font-weight: 500;
 }
 .brand-period {
   color: var(--ui-muted);
@@ -130,23 +134,24 @@ p {
   align-items: center;
   gap: 10px;
   width: 100%;
-  border: 1px solid var(--ui-border);
-  border-radius: 8px;
+  border: 1px solid var(--ui-accent);
+  border-radius: 4px;
   padding: 12px 13px;
-  background: var(--ui-selected);
-  color: var(--ui-accent);
-  font-size: 0.875rem;
-  font-weight: 600;
-  transition: background 0.15s;
+  background: var(--ui-accent);
+  color: var(--ui-on-accent);
+  font-size: .875rem;
+  font-weight: 550;
+  transition: filter .15s;
 }
 .new-chat-button:hover {
-  background: var(--ui-hover);
+  background: var(--ui-accent);
+  filter: brightness(.93);
 }
 .new-chat-hint {
   margin-left: auto;
   font-size: 1.0625rem;
   font-weight: 400;
-  color: var(--ui-muted);
+  color: inherit;
 }
 .workspace-nav-label {
   margin-top: 25px;
@@ -449,11 +454,11 @@ p {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  min-height: 72px;
+  min-height: 64px;
   flex-shrink: 0;
-  padding: 0 33px;
+  padding: 0 32px;
   border-bottom: 1px solid var(--border);
-  background: var(--ui-surface);
+  background: var(--ui-canvas);
 }
 .workspace-breadcrumb {
   display: flex;
@@ -515,15 +520,13 @@ p {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 33px;
+  padding: 22px 32px;
   flex-shrink: 0;
 }
 .workspace-heading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--ui-muted);
-  font-size: 0.75rem;
+  color: var(--ui-text);
+  font-size: .9375rem;
+  font-weight: 550;
 }
 .workspace-heading > svg {
   color: var(--ui-muted);
@@ -533,8 +536,8 @@ p {
   gap: 3px;
   padding: 3px;
   border: 1px solid var(--ui-border);
-  border-radius: 7px;
-  background: var(--ui-surface-alt);
+  border-radius: 5px;
+  background: transparent;
 }
 .view-switcher button {
   display: flex;
@@ -548,9 +551,9 @@ p {
   font-size: 0.75rem;
 }
 .view-switcher button.active {
-  background: var(--ui-surface);
-  color: var(--ui-accent);
-  box-shadow: var(--ui-shadow);
+  background: var(--ui-accent);
+  color: var(--ui-on-accent);
+  box-shadow: none;
 }
 .workspace-content {
   display: flex;
@@ -576,10 +579,10 @@ p {
   flex-direction: column;
   justify-content: center;
   min-height: 100%;
-  max-width: 720px;
+  max-width: 660px;
   margin: auto;
-  padding: 36px 0 30px;
-  text-align: center;
+  padding: 32px 12px;
+  text-align: left;
 }
 .welcome-emblem {
   position: relative;
@@ -595,42 +598,40 @@ p {
 
 }
 .welcome h1 {
-  font-family: inherit;
-  font-size: clamp(2rem, 3vw, 2.75rem);
-  line-height: 1.14;
-  font-weight: 650;
-  letter-spacing: -0.035em;
+  font-family: var(--font-display);
+  font-size: clamp(2.75rem, 4.4vw, 4.5rem);
+  line-height: 1.03;
+  font-weight: 400;
+  letter-spacing: -.045em;
   color: var(--ui-text);
-  margin: 0 0 20px;
+  margin: 0 0 22px;
 }
 .welcome-copy {
   color: var(--ui-muted);
-  font-size: 1rem;
-  line-height: 1.85;
-  margin-bottom: 35px;
+  font-size: .9375rem;
+  line-height: 1.7;
+  margin-bottom: 30px;
+  max-width: 420px;
 }
 .starter-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  margin: 0 0 21px;
+  grid-template-columns: 1fr;
+  gap: 0;
+  margin: 0;
+  border-top: 1px solid var(--ui-border);
 }
 .starter-card {
   position: relative;
   text-align: left;
-  border: 1px solid var(--ui-border);
-  border-radius: 9px;
-  padding: 18px 15px 22px;
-  background: var(--ui-surface);
-  transition:
-    border-color 0.15s,
-    background 0.15s,
-    box-shadow 0.15s;
+  border: 0;
+  border-bottom: 1px solid var(--ui-border);
+  border-radius: 0;
+  padding: 17px 30px 17px 38px;
+  background: transparent;
+  transition: background .15s;
 }
 .starter-card:hover {
   background: var(--ui-hover);
-  border-color: var(--ui-control-border);
-
 }
 .starter-card > svg:first-child {
   color: var(--ui-muted);
@@ -639,21 +640,21 @@ p {
 .starter-card strong {
   display: block;
   color: var(--ui-text);
-  font-size: 0.875rem;
-  margin: 0 0 8px;
+  font-size: .875rem;
+  margin: 0 0 5px;
   font-weight: 600;
 }
 .starter-card > span {
   display: block;
-  font-size: 0.875rem;
-  line-height: 1.7;
+  font-size: .8125rem;
+  line-height: 1.6;
   color: var(--ui-muted);
 }
 .starter-arrow {
   position: absolute;
   top: 18px;
-  right: 13px;
-  color: var(--ui-muted);
+  right: 8px;
+  color: var(--ui-accent);
 }
 .composer-area {
   width: 100%;
@@ -664,9 +665,9 @@ p {
 }
 .composer {
   border: 1px solid var(--ui-control-border);
-  border-radius: 13px;
+  border-radius: 5px;
   background: var(--ui-surface);
-  box-shadow: var(--ui-shadow);
+  box-shadow: none;
   padding: 16px 16px 12px;
 }
 .composer:focus-within {
@@ -716,9 +717,9 @@ p {
   gap: 8px;
   border: 1px solid transparent;
   padding: 9px 12px;
-  border-radius: 7px;
+  border-radius: 4px;
   font-size: 0.75rem;
-  font-weight: 500;
+  font-weight: 550;
   line-height: 1.3;
 }
 .send-button {
@@ -754,10 +755,10 @@ p {
 }
 .composer-disclaimer {
   margin: 11px 0 0;
-  text-align: center;
-  font-size: 0.75rem;
+  text-align: left;
+  font-size: .6875rem;
   color: var(--ui-muted);
-  line-height: 1.5;
+  line-height: 1.6;
 }
 .background-hint {
   display: flex;
@@ -964,20 +965,20 @@ p {
   padding: 12px 22px 16px;
 }
 .view-split .welcome {
-  padding: 16px 0;
+  padding: 28px 4px;
 }
 .view-split .welcome h1 {
-  font-size: 2.125rem;
+  font-size: clamp(2.75rem, 4vw, 4rem);
 }
 .view-split .welcome-copy {
   margin-bottom: 20px;
 }
 .view-split .starter-grid {
   grid-template-columns: 1fr;
-  gap: 8px;
+  gap: 0;
 }
 .view-split .starter-card {
-  padding: 12px 35px 12px 42px;
+  padding: 14px 28px 14px 34px;
 }
 .view-split .starter-card > svg:first-child {
   position: absolute;
@@ -1061,7 +1062,7 @@ p {
 }
 @media (max-width: 1100px) {
   .sidebar {
-    width: 260px;
+    width: 235px;
     padding-left: 10px;
     padding-right: 10px;
   }
@@ -1089,17 +1090,17 @@ p {
     min-height: 450px;
   }
   .view-split .starter-grid {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: 1fr;
   }
   .view-split .starter-card {
-    padding: 12px;
+    padding: 14px 28px 14px 34px;
   }
   .view-split .starter-card > svg:first-child {
     position: static;
     margin-bottom: 8px;
   }
   .view-split .starter-card > span {
-    display: none;
+    display: block;
   }
 }
 @media (max-width: 760px) {
@@ -1334,13 +1335,14 @@ p {
   .topbar { padding-block: 8px; gap: 8px; }
   .current-title { max-width: 36vw; }
   .header-status { min-width: 0; }
-  .welcome h1 { font-size: clamp(1.75rem, 6vw, 2.25rem); }
-  .welcome { padding-block: 24px; }
+  .welcome h1, .view-split .welcome h1 { font-size: clamp(2.5rem, 9vw, 3.5rem); }
+  .welcome { padding: 28px 0; }
   .welcome-copy { font-size: 0.875rem; }
-  .starter-grid, .view-split .starter-grid { grid-template-columns: 1fr; gap: 8px; }
-  .starter-card, .view-split .starter-card { padding: 14px 40px 14px 48px; }
+  .starter-grid, .view-split .starter-grid { grid-template-columns: 1fr; gap: 0; }
+  .starter-card, .view-split .starter-card { padding: 16px 30px 16px 34px; }
+  .starter-card > span { display: block; }
   .starter-card > svg:first-child, .view-split .starter-card > svg:first-child { position: absolute; left: 16px; top: 15px; margin: 0; }
-  .starter-card strong { font-size: 0.875rem; margin: 0; }
+  .starter-card strong { font-size: 0.875rem; margin: 0 0 5px; }
   .starter-arrow { display: block; }
   .composer textarea, .search-box input, .action-dialog input { font-size: 1rem; }
   .composer-area { padding-inline: 16px; }
@@ -1367,3 +1369,24 @@ p {
 @media (prefers-reduced-transparency: reduce) {
   :root { --ui-backdrop: #EDF2F8; --ui-shadow: none; }
 }
+
+/* Notebook numbering belongs to the questions, not their decoration. */
+.starter-heading { margin: 0 0 12px; color: var(--ui-muted); font-size: .75rem; font-weight: 500; }
+.starter-card .starter-number { position: absolute; left: 3px; top: 18px; font: .6875rem var(--font-data); color: var(--ui-accent); }
+.conversation-row.selected { box-shadow: inset 2px 0 var(--ui-accent); border-radius: 3px; }
+.workspace-nav-button { border-radius: 4px; }
+.conversation-status, .sidebar-section-label, .run-percentage { font-family: var(--font-data); }
+.search-box { border-radius: 4px; background: var(--ui-surface); }
+.brand-period { color: var(--ui-accent); }
+@media (max-width: 760px) {
+  .starter-card .starter-number { top: 19px; }
+  .workspace-heading { font-size: .875rem; }
+  .view-split .chat-panel { min-height: 680px; }
+  .view-split .message-scroll { max-height: none; flex: none; }
+  .view-split .composer-area { padding-inline: 20px; }
+}
+.simulation-context-bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--ui-border, #e2e7ef); background: var(--ui-surface-alt, #f8fafc); }
+.simulation-context-bar > div { min-width: 0; flex: 1 1 180px; }
+.simulation-context-bar strong { display: block; font-size: .82rem; line-height: 1.5; overflow-wrap: anywhere; }
+.simulation-context-bar span { display: block; margin-top: 3px; color: var(--ui-muted, #5d616b); font-size: .75rem; line-height: 1.5; }
+.simulation-context-bar button { min-height: 40px; font-size: .78rem; }

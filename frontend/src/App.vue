@@ -5,9 +5,29 @@ import SimulationGraph from "./components/SimulationGraph.vue";
 import BottleneckTimeline from "./components/BottleneckTimeline.vue";
 import DocumentPreflight from "./components/DocumentPreflight.vue";
 import ResearcherLogin from "./components/ResearcherLogin.vue";
+import SampleCaseGraph from "./components/SampleCaseGraph.vue";
+import NewSimulationDialog from "./components/NewSimulationDialog.vue";
 import { useResearcherAccount } from "./composables/useResearcherAccount.js";
+import { useResearcherProfile } from "./composables/useResearcherProfile.js";
 import { useSimulationWorkspace } from "./composables/useSimulationWorkspace.js";
-import { PROMPT_LIMIT, TITLE_LIMIT } from "./lib/simulationWorkspace.js";
+import { PROMPT_LIMIT, TITLE_LIMIT, STORAGE_KEY } from "./lib/simulationWorkspace.js";
+import { workspaceStorageKey } from "./lib/workspaceStorage.js";
+
+const { account, busy: accountBusy, error: accountError, ready: providerReady, google, connect, disconnect, signout } = useResearcherAccount();
+const { university, universityError, saveUniversity } = useResearcherProfile(account);
+let savedWorkspaceKind = "demo";
+try { if (sessionStorage.getItem("microfish.workspace-choice.v1") === "personal") savedWorkspaceKind = "personal"; } catch { /* Navigation also works without browser storage. */ }
+const workspaceKind = ref(savedWorkspaceKind);
+const storageIdentity = computed(() => workspaceKind.value === "personal" ? account.user?.id || account.user?.email || null : null);
+const simulationStorageKey = computed(() => workspaceStorageKey(STORAGE_KEY, storageIdentity.value));
+const timelineStorageKey = computed(() => workspaceStorageKey("microfish.bottleneck-timeline.v1", storageIdentity.value));
+const preflightStorageKey = computed(() => workspaceStorageKey("microfish.document-preflight.v1", storageIdentity.value));
+function chooseWorkspace(kind) {
+  workspaceKind.value = kind;
+  search.value = "";
+  submitError.value = "";
+  try { sessionStorage.setItem("microfish.workspace-choice.v1", kind); } catch { /* Keep the selected workspace for this visit. */ }
+}
 
 const {
   sessions,
@@ -16,22 +36,29 @@ const {
   runningCount,
   storageWarning,
   createSession,
+  setSessionContext,
   selectSession,
   renameSession,
   deleteSession,
   startRun,
   startOpenAIRun,
   stopRun,
-} = useSimulationWorkspace();
-const { account, busy: accountBusy, error: accountError, ready: providerReady, google, chatgpt, disconnect, signout } = useResearcherAccount();
+} = useSimulationWorkspace({ storageKey: simulationStorageKey });
 const runMode = ref("demo");
 const loginPage = ref(null);
 function enterWorkspace(mode) {
+  if (!account.user || !university.value) return;
+  chooseWorkspace("personal");
   runMode.value = mode;
   navigate("simulations");
 }
+function enterDemo() {
+  chooseWorkspace("demo");
+  runMode.value = "demo";
+  navigate("case");
+}
 watch(providerReady, (ready) => {
-  if (ready) runMode.value = "openai";
+  if (ready && workspaceKind.value === "personal") runMode.value = "openai";
   else {
     for (const session of sessions.value) {
       if (session.runs.some(run => run.mode === "openai" && run.status === "running")) stopRun(session.id);
@@ -41,18 +68,27 @@ watch(providerReady, (ready) => {
 const activeView = ref("Split");
 function pageFromHash() {
   const hash = window.location.hash.split("?")[0];
-  return ({ "#/timeline": "timeline", "#/preflight": "preflight", "#/login": "login", "#/simulations": "simulations" })[hash] || "login";
+  return ({ "#/case": "case", "#/timeline": "timeline", "#/preflight": "preflight", "#/login": "login", "#/simulations": "simulations" })[hash] || "login";
 }
 const currentPage = ref(pageFromHash());
 const timelinePage = ref(null);
 const preflightPage = ref(null);
+const casePage = ref(null);
+watch(() => [account.loading, account.user?.id || account.user?.email], ([loading, id], [, previousId]) => {
+  if (loading || workspaceKind.value !== "personal") return;
+  if (!id) {
+    chooseWorkspace("demo");
+    runMode.value = "demo";
+    navigate("login");
+  } else if (previousId && previousId !== id) navigate("login");
+});
 function syncPage() {
   currentPage.value = pageFromHash();
   sidebarOpen.value = false;
   menuId.value = null;
 }
 function navigate(page) {
-  window.location.hash = ({ timeline: "/timeline", preflight: "/preflight", login: "/login" })[page] || "/simulations";
+  window.location.hash = ({ case: "/case", timeline: "/timeline", preflight: "/preflight", login: "/login" })[page] || "/simulations";
   currentPage.value = page;
   sidebarOpen.value = false;
   menuId.value = null;
@@ -64,6 +100,7 @@ watch(currentPage, async (page) => {
   if (page === "timeline") timelinePage.value?.focusHeading();
   else if (page === "preflight") preflightPage.value?.focusHeading();
   else if (page === "login") loginPage.value?.focusHeading();
+  else if (page === "case") casePage.value?.focusHeading();
   else composer.value?.focus();
 });
 const search = ref("");
@@ -126,6 +163,19 @@ const editedTitle = ref("");
 const renameInput = ref(null);
 let dialogFocusReturn;
 const submitError = ref("");
+const setupOpen = ref(false);
+const editingSessionId = ref(null);
+const setupError = ref("");
+const setupSession = computed(() => sessions.value.find(session => session.id === editingSessionId.value));
+watch([storageIdentity, workspaceKind], () => { setupOpen.value = false; editingSessionId.value = null; });
+watch(currentPage, page => { if (page === 'login') setupOpen.value = false; });
+watch(
+  () => [account.loading, account.user, workspaceKind.value, university.value, currentPage.value],
+  () => {
+    if (!account.loading && account.user && workspaceKind.value === 'personal' && !university.value && currentPage.value !== 'login') navigate('login');
+  },
+  { immediate: true },
+);
 const views = [
   { name: "Chat", icon: "chat" },
   { name: "Split", icon: "split" },
@@ -193,12 +243,38 @@ function selectChat(id) {
   submitError.value = "";
 }
 async function newChat() {
-  if (!createSession()) return;
-  navigate("simulations");
-  search.value = "";
   sidebarOpen.value = false;
-  activeView.value = "Split";
+  editingSessionId.value = null;
+  setupError.value = "";
+  await nextTick();
+  setupOpen.value = true;
+}
+function editSetup() {
+  if (isRunning.value) return;
+  editingSessionId.value = activeId.value;
+  setupError.value = "";
+  setupOpen.value = true;
+}
+async function saveSetup({ title, question, context }) {
+  if (editingSessionId.value) {
+    if (!setSessionContext(editingSessionId.value, context)) {
+      setupError.value = storageWarning.value || 'Stop the current run before changing its setup.';
+      return;
+    }
+    if (title) renameSession(editingSessionId.value, title);
+    const session = sessions.value.find(item => item.id === editingSessionId.value);
+    if (session) session.draft = question;
+    selectSession(editingSessionId.value);
+  } else {
+    const session = createSession({ title, context });
+    if (!session) { setupError.value = storageWarning.value || 'This simulation could not be created.'; return; }
+    activeSession.value.draft = question;
+  }
+  setupOpen.value = false;
+  search.value = "";
   submitError.value = "";
+  activeView.value = "Chat";
+  navigate('simulations');
   await nextTick();
   composer.value?.focus();
 }
@@ -209,7 +285,7 @@ async function useStarter(prompt) {
 }
 function submitRun() {
   if (!canSubmit.value) return;
-  if (runMode.value === "openai" && !providerReady.value) {
+  if (runMode.value === "openai" && (workspaceKind.value !== "personal" || !providerReady.value)) {
     navigate("login");
     return;
   }
@@ -274,17 +350,20 @@ watch(
 
 <template>
   <ResearcherLogin
-    v-if="currentPage === 'login'"
+    v-if="currentPage === 'login' || (workspaceKind === 'personal' && (account.loading || !university))"
     ref="loginPage"
     :account="account"
     :busy="accountBusy"
     :error="accountError"
+    :university="university"
+    :university-error="universityError"
+    @save-university="saveUniversity"
     @google="google"
-    @chatgpt="chatgpt"
+    @connect="connect"
     @disconnect="disconnect"
     @signout="signout"
     @continue="enterWorkspace($event)"
-    @demo="enterWorkspace('demo')"
+    @demo="enterDemo"
   />
   <div
     v-else
@@ -328,6 +407,17 @@ watch(
       </button>
       <div class="sidebar-section-label workspace-nav-label">WORKSPACE</div>
       <nav class="workspace-navigation" aria-label="Workspace pages">
+        <button
+          v-if="workspaceKind === 'demo'"
+          class="workspace-nav-button"
+          :class="{ active: currentPage === 'case' }"
+          :aria-current="currentPage === 'case' ? 'page' : undefined"
+          @click="navigate('case')"
+        >
+          <AppIcon name="people" :size="18" />
+          <span>Sample case study</span>
+          <AppIcon class="workspace-nav-arrow" name="arrow-up-right" :size="15" />
+        </button>
         <button
           class="workspace-nav-button"
           :class="{ active: currentPage === 'timeline' }"
@@ -433,7 +523,7 @@ watch(
         <button class="workspace-identity account-button" @click="navigate('login')">
           <span class="workspace-avatar">{{ account.user?.name?.charAt(0) || 'M' }}</span>
           <div>
-            <strong>{{ account.user?.name || 'Researcher sign-in' }}</strong><span>{{ account.user ? 'Account & AI connection' : 'Google or ChatGPT' }}</span>
+            <strong>{{ workspaceKind === 'personal' ? account.user?.name || 'Researcher' : 'Demo workspace' }}</strong><span :title="workspaceKind === 'personal' ? university?.name : undefined">{{ workspaceKind === 'personal' ? university?.name || 'Account & AI connection' : 'Sign in for your own work' }}</span>
           </div>
           <AppIcon name="lock" :size="15" />
         </button>
@@ -451,25 +541,25 @@ watch(
             @click="sidebarOpen = !sidebarOpen"
           >
             <AppIcon name="sidebar" /></button
-          ><span class="breadcrumb-parent">Workspace</span
+          ><span class="breadcrumb-parent">{{ workspaceKind === 'personal' ? 'Your workspace' : 'Demo workspace' }}</span
           ><span class="breadcrumb-divider">/</span
-          ><span class="current-title">{{ currentPage === 'timeline' ? 'Bottleneck timeline' : currentPage === 'preflight' ? 'Document preflight' : activeSession?.title }}</span>
+          ><span class="current-title">{{ currentPage === 'case' ? 'REST-101 sample case' : currentPage === 'timeline' ? 'Bottleneck timeline' : currentPage === 'preflight' ? 'Document preflight' : activeSession?.title }}</span>
         </div>
         <div class="header-status">
           <span v-if="runningCount" class="running-badge" role="status"
             ><span class="status-dot running"></span
             >{{ runningCount }} running</span
-          ><button class="demo-badge account-status" @click="navigate('login')"><span></span>{{ runMode === 'openai' ? (providerReady ? 'OpenAI connected' : 'Reconnect OpenAI') : 'Demo mode' }}</button>
+          ><button class="demo-badge account-status" @click="navigate('login')"><span></span>{{ workspaceKind === 'demo' ? 'Demo mode' : providerReady ? 'OpenAI connected' : 'Connect OpenAI' }}</button>
         </div>
       </header>
-      <BottleneckTimeline ref="timelinePage" v-show="currentPage === 'timeline'" />
-      <DocumentPreflight ref="preflightPage" v-show="currentPage === 'preflight'" />
+      <SampleCaseGraph v-if="currentPage === 'case'" ref="casePage" @navigate="navigate($event)" />
+      <BottleneckTimeline :key="timelineStorageKey" ref="timelinePage" :storage-key="timelineStorageKey" v-show="currentPage === 'timeline'" />
+      <DocumentPreflight :key="preflightStorageKey" ref="preflightPage" :storage-key="preflightStorageKey" :sample-default="workspaceKind === 'demo'" v-show="currentPage === 'preflight'" />
       <main v-if="activeSession" v-show="currentPage === 'simulations'" class="workspace">
         <div class="workspace-toolbar">
           <div class="workspace-heading">
-            <AppIcon name="layers" :size="18" /><span
-              >Simulation workspace</span
-            >
+            <span>Scenario notebook</span>
+            <button v-if="!activeSession.context" type="button" class="secondary-button" :disabled="isRunning" @click="editSetup">Add study context</button>
           </div>
           <nav class="view-switcher" aria-label="Workspace view">
             <button
@@ -485,6 +575,10 @@ watch(
             </button>
           </nav>
         </div>
+        <section v-if="activeSession.context" class="simulation-context-bar" aria-label="Simulation setup">
+          <div><strong>{{ activeSession.context.university?.name || 'Study context' }}</strong><span>{{ activeSession.context.documents.length }} {{ activeSession.context.documents.length === 1 ? 'document' : 'documents' }}<template v-if="activeSession.context.transcript"> · Voice transcript</template><template v-if="activeSession.context.institution"> · {{ activeSession.context.institution.reviewers?.length || 0 }} reviewer profiles</template></span></div>
+          <button type="button" class="secondary-button" :disabled="isRunning" @click="editSetup">Review setup & sources</button>
+        </section>
         <div v-if="storageWarning" class="storage-warning" role="alert">
           <AppIcon name="info" :size="17" />{{ storageWarning }}
         </div>
@@ -499,22 +593,20 @@ watch(
           >
             <div ref="messageList" class="message-scroll">
               <div v-if="!activeSession.messages.length" class="welcome">
-                <div class="welcome-emblem">
-                  <AppIcon name="fish" :size="38" />
-                </div>
-                <h1>Explore your next what-if.</h1>
+                <h1>Start with <br />a question.</h1>
                 <p class="welcome-copy">
-                  Compare scenarios, follow the connections, and uncover questions
-                  to explore before your next study.
+                  A change in timing. A different approach. A community’s response.
+                  Give your next what-if a place to unfold.
                 </p>
+                <h2 class="starter-heading">Questions to get you started</h2>
                 <div class="starter-grid">
                   <button
-                    v-for="starter in starters"
+                    v-for="(starter, index) in starters"
                     :key="starter.title"
                     class="starter-card"
                     @click="useStarter(starter.prompt)"
                   >
-                    <AppIcon :name="starter.icon" :size="20" /><strong>{{
+                    <span class="starter-number" aria-hidden="true">0{{ index + 1 }}</span><strong>{{
                       starter.title
                     }}</strong
                     ><span>{{ starter.prompt }}</span
@@ -657,7 +749,7 @@ watch(
                     <span class="sr-only">Simulation provider</span>
                     <select v-model="runMode" :disabled="isRunning">
                       <option value="demo">12 demo agents</option>
-                      <option value="openai" :disabled="!providerReady">{{ providerReady ? 'OpenAI · 3 perspectives' : 'AI connection unavailable' }}</option>
+                      <option value="openai" :disabled="workspaceKind === 'demo'">{{ workspaceKind === 'demo' ? 'OpenAI · open your workspace' : providerReady ? 'OpenAI · 3 perspectives' : 'OpenAI · connect API key' }}</option>
                     </select>
                   </label><button
                     v-if="isRunning"
@@ -681,8 +773,8 @@ watch(
                 {{ submitError }}
               </p>
               <p class="composer-disclaimer">
-                {{ runMode === 'openai' ? 'AI explorations are hypotheses, not research findings. API usage is billed to your OpenAI account.' : (providerReady ? 'Demo runs show the workflow. Choose OpenAI for an AI exploration.' : 'Sample simulations show the workflow. ChatGPT-powered AI runs are not available yet.') }}
-                Chats are saved on this device.
+                {{ runMode === 'openai' ? 'AI explorations are hypotheses, not research findings. API usage is billed to your OpenAI account.' : (providerReady ? 'Demo runs show the workflow. Choose OpenAI for an AI exploration.' : 'Sample simulations show the workflow. Connect your OpenAI API key to run AI explorations.') }}
+                {{ workspaceKind === 'personal' ? 'Chats are saved for your Google account in this browser.' : 'Demo chats are saved in this browser.' }}
               </p>
             </div>
           </section>
@@ -718,6 +810,18 @@ watch(
         </div>
       </main>
     </div>
+    <NewSimulationDialog
+      :open="setupOpen"
+      :personal="workspaceKind === 'personal'"
+      :ai-ready="workspaceKind === 'personal' && providerReady"
+      :university="setupSession?.context?.university || (workspaceKind === 'personal' ? university : null)"
+      :initial-context="setupSession?.context || null"
+      :initial-title="setupSession?.title || ''"
+      :initial-question="setupSession?.draft || ''"
+      :error="setupError"
+      @close="setupOpen = false"
+      @submit="saveSetup"
+    />
     <dialog
       ref="actionDialog"
       class="action-dialog"

@@ -1,7 +1,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
 export function useResearcherAccount() {
-  const account = reactive({ loading: true, configured: false, providers: { google: false, chatgpt: false }, user: null, openaiConnected: false })
+  const account = reactive({ loading: true, configured: false, user: null, openaiConnected: false })
   const busy = ref(false)
   const error = ref('')
   const ready = computed(() => Boolean(account.user && account.openaiConnected))
@@ -22,12 +22,12 @@ export function useResearcherAccount() {
     try {
       const result = await request('/api/account')
       if (generation !== refreshGeneration) return
-      Object.assign(account, { configured: result.configured === true, providers: result.providers || { google: result.configured === true, chatgpt: false }, user: result.user || null, openaiConnected: result.openaiConnected === true })
+      Object.assign(account, { configured: result.configured === true, user: result.user || null, openaiConnected: result.openaiConnected === true })
       if (refreshError) error.value = ''
       refreshError = false
     } catch (cause) {
       if (generation !== refreshGeneration) return
-      Object.assign(account, { configured: false, providers: { google: false, chatgpt: false }, user: null, openaiConnected: false })
+      Object.assign(account, { configured: false, user: null, openaiConnected: false })
       error.value = cause.name === 'TimeoutError' ? 'Account services took too long to respond. Please try again.' : cause.message
       refreshError = true
     } finally {
@@ -56,20 +56,10 @@ export function useResearcherAccount() {
   }
 
   const google = () => action(async () => {
-    if (!account.providers.google) throw new Error('Google sign-in is being configured. Explore the demo for now.')
+    if (!account.configured) throw new Error('Google sign-in is being configured. Explore the demo for now.')
     const result = await authAction('signin/google')
     const destination = new URL(result.url, window.location.origin)
     if (destination.origin !== window.location.origin && destination.origin !== 'https://accounts.google.com') {
-      throw new Error('The sign-in destination could not be verified.')
-    }
-    window.location.assign(destination.href)
-  })
-
-  const chatgpt = () => action(async () => {
-    if (!account.providers.chatgpt) throw new Error('ChatGPT sign-in is awaiting OpenAI approval and setup for Microfish.')
-    const result = await authAction('signin/chatgpt')
-    const destination = new URL(result.url, window.location.origin)
-    if (destination.origin !== window.location.origin && destination.origin !== 'https://auth.openai.com') {
       throw new Error('The sign-in destination could not be verified.')
     }
     window.location.assign(destination.href)
@@ -98,5 +88,5 @@ export function useResearcherAccount() {
     window.addEventListener('focus', onFocus)
   })
   onUnmounted(() => { refreshGeneration++; window.removeEventListener('focus', onFocus) })
-  return { account, busy, error, ready, refresh, google, chatgpt, connect, disconnect, signout }
+  return { account, busy, error, ready, refresh, google, connect, disconnect, signout }
 }

@@ -3,7 +3,11 @@ import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import AppIcon from './AppIcon.vue';
 import { analyzePacket, createSamplePacket, inferDocumentVersion, PREFLIGHT_CATEGORIES, CHECK_SCOPE } from '../lib/documentPreflight.js';
 
-const STORAGE_KEY = 'microfish.document-preflight.v1';
+const props = defineProps({
+  storageKey: { type: String, default: 'microfish.document-preflight.v1' },
+  sampleDefault: { type: Boolean, default: true },
+});
+const STORAGE_KEY = props.storageKey;
 const MAX_DOCUMENTS = 12;
 const MAX_TEXT = 100000;
 const MAX_PACKET = 500000;
@@ -44,14 +48,14 @@ function restore() {
       || saved.documents.reduce((total, document) => total + document.text.length, 0) > MAX_PACKET) throw new Error('Invalid saved packet');
     return saved;
   } catch {
-    storageNotice.value = 'The saved packet could not be loaded. The example packet is open; changes will stay available in this tab.';
+    storageNotice.value = 'The saved packet could not be loaded. Changes will stay available in this tab.';
     return null;
   }
 }
 const saved = restore();
-const documents = ref(saved?.documents ?? createSamplePacket());
-const isExample = ref(saved ? saved.isExample === true : true);
-const hasScanned = ref(saved ? saved.hasScanned === true : true);
+const documents = ref(saved?.documents ?? (props.sampleDefault ? createSamplePacket() : []));
+const isExample = ref(saved ? saved.isExample === true : props.sampleDefault);
+const hasScanned = ref(saved ? saved.hasScanned === true : props.sampleDefault);
 const lastScannedAt = ref(saved?.lastScannedAt || null);
 const reviewed = ref(Array.isArray(saved?.reviewed) ? saved.reviewed.filter(id => typeof id === 'string') : []);
 const results = ref(hasScanned.value ? analyzePacket(documents.value) : { findings: [], checksRun: 0 });
@@ -246,8 +250,8 @@ onUnmounted(() => { disposed = true; cancelAnimationFrame(pendingFrame); });
     <div class="pf-content">
       <header class="pf-header">
         <div>
-          <h1 id="preflight-heading" ref="heading" tabindex="-1">Document preflight<span>.</span></h1>
-          <p>Catch the small gaps before they become big delays.</p>
+          <h1 id="preflight-heading" ref="heading" tabindex="-1">Document preflight</h1>
+          <p>A closer look at the details your study depends on.</p>
         </div>
         <div class="pf-header-actions">
           <button class="pf-button pf-secondary" :disabled="!hasScanned || running" @click="exportReview"><AppIcon name="download" :size="16" /><span>Export review</span></button>
@@ -375,11 +379,11 @@ onUnmounted(() => { disposed = true; cancelAnimationFrame(pendingFrame); });
 .preflight-page button:disabled { cursor: not-allowed; opacity: .55; }
 .preflight-page svg { flex-shrink: 0; }
 .pf-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 24px; margin-bottom: 20px; }
-.pf-header h1 { font-size: clamp(1.75rem, 2.55vw, 2.25rem); line-height: 1.2; font-weight: 650; letter-spacing: -.045em; margin: 0 0 10px; color: var(--ui-text); }
+.pf-header h1 { font-family: var(--font-display); font-size: clamp(2.5rem, 3.4vw, 3.5rem); line-height: 1.1; font-weight: 400; letter-spacing: -.045em; margin: 0 0 12px; color: var(--ui-text); }
 .pf-header h1 span { color: var(--ui-accent); }
 .pf-header p { color: var(--ui-muted); font-size: .9375rem; line-height: 1.6; margin: 0; }
 .pf-header-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.pf-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 9px; padding: 10px 14px; font-size: .875rem; line-height: 1.4; font-weight: 600; border: 1px solid transparent; }
+.pf-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 4px; padding: 10px 14px; font-size: .8125rem; line-height: 1.4; font-weight: 550; border: 1px solid transparent; }
 .pf-primary { color: var(--ui-on-accent); background: var(--ui-accent); border-color: var(--ui-accent); }
 .pf-primary:hover:not(:disabled) { filter: brightness(.94); }
 .pf-secondary { background: var(--ui-surface); border-color: var(--ui-control-border); color: var(--ui-text); }
@@ -392,23 +396,23 @@ onUnmounted(() => { disposed = true; cancelAnimationFrame(pendingFrame); });
 .pf-notice { display: flex; gap: 10px; align-items: center; background: var(--ui-surface-alt); border: 1px solid var(--ui-border); border-radius: 10px; padding: 12px 16px; margin-bottom: 18px; font-size: .875rem; line-height: 1.6; }
 .pf-notice > span { flex: 1; overflow-wrap: anywhere; }
 .pf-text-button { padding: 8px; background: none; border: 0; color: var(--ui-accent); text-decoration: underline; text-underline-offset: 3px; font-size: .875rem; }
-.pf-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 28px; }
-.pf-metric { min-width: 0; border: 1px solid var(--ui-control-border); border-radius: 12px; background: var(--ui-surface); padding: 16px; text-align: left; transition: border-color .15s, background .15s; }
+.pf-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border-block: 1px solid var(--ui-border); margin-bottom: 32px; }
+.pf-metric { min-width: 0; border: 0; border-right: 1px solid var(--ui-border); border-bottom: 2px solid transparent; border-radius: 0; background: transparent; padding: 18px 20px; text-align: left; transition: background .15s; }
 .pf-metric:hover { background: var(--ui-hover); }
-.pf-metric.selected { border-color: var(--ui-accent); background: var(--ui-selected); box-shadow: inset 0 0 0 1px var(--ui-accent); }
-.pf-metric-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 16px; }
-.pf-metric-icon { height: 36px; width: 36px; flex-shrink: 0; border-radius: 9px; display: grid; place-items: center; }
+.pf-metric.selected { border-bottom-color: var(--ui-accent); background: var(--ui-selected); }
+.pf-metric-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px; }
+.pf-metric-icon { height: 24px; width: 24px; flex-shrink: 0; border-radius: 3px; display: grid; place-items: center; }
 .missing .pf-metric-icon, .pf-finding-symbol.missing { color: var(--ui-warning); background: var(--ui-warning-bg); }
 .conflict .pf-metric-icon, .pf-finding-symbol.conflict { color: var(--ui-danger); background: var(--ui-danger-bg); }
 .outdated .pf-metric-icon, .pf-finding-symbol.outdated { color: var(--ui-info); background: var(--ui-info-bg); }
 .question .pf-metric-icon, .pf-finding-symbol.question { color: var(--ui-purple); background: var(--ui-purple-bg); }
-.pf-metric-top strong { font-size: 1.75rem; font-weight: 600; line-height: 1; letter-spacing: -.04em; color: var(--ui-text); font-variant-numeric: tabular-nums; }
+.pf-metric-top strong { font-family: var(--font-display); font-size: 2.25rem; font-weight: 400; line-height: 1; color: var(--ui-text); font-variant-numeric: tabular-nums; }
 .pf-metric-label { display: block; font-size: .875rem; font-weight: 600; color: var(--ui-text); margin-bottom: 10px; line-height: 1.5; overflow-wrap: anywhere; }
 .pf-metric-link { display: flex; justify-content: space-between; align-items: center; gap: 5px; color: var(--ui-muted); font-size: .75rem; line-height: 1.5; }
 .pf-workbench { display: grid; grid-template-columns: minmax(0, 272px) minmax(0, 1fr); gap: 24px; align-items: start; }
-.pf-packet-panel { min-width: 0; border: 1px solid var(--ui-border); background: var(--ui-surface-alt); border-radius: 12px; padding: 20px 16px 12px; }
+.pf-packet-panel { min-width: 0; border: 1px solid var(--ui-border); background: var(--ui-surface-alt); border-radius: 4px; padding: 20px 16px 12px; }
 .pf-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.pf-panel-heading h2, .pf-findings-heading h2 { margin: 0; font-size: 1.125rem; font-weight: 650; letter-spacing: -.02em; color: var(--ui-text); }
+.pf-panel-heading h2, .pf-findings-heading h2 { margin: 0; font-family: var(--font-display); font-size: 1.5rem; font-weight: 400; letter-spacing: -.025em; color: var(--ui-text); }
 .pf-count { display: grid; place-items: center; min-width: 24px; min-height: 24px; padding: 2px 6px; border-radius: 6px; background: var(--ui-surface); color: var(--ui-muted); font-size: .75rem; }
 .pf-panel-description { margin: 10px 0 18px; font-size: .875rem; line-height: 1.6; color: var(--ui-muted); }
 .pf-upload { display: flex; flex-direction: column; align-items: center; width: 100%; background: var(--ui-surface); border: 1px dashed var(--ui-control-border); border-radius: 9px; padding: 20px 12px; color: var(--ui-accent); text-align: center; }
@@ -447,10 +451,10 @@ onUnmounted(() => { disposed = true; cancelAnimationFrame(pendingFrame); });
 .pf-filter-reset { display: flex; align-items: center; gap: 6px; background: none; border: 0; padding: 8px 0; font-size: .75rem; line-height: 1.5; color: var(--ui-accent); text-align: left; }
 .pf-filter-reset:hover:not(:disabled) { text-decoration: underline; text-underline-offset: 3px; }
 .preflight-page .pf-filter-reset:disabled { cursor: default; opacity: 1; color: var(--ui-muted); }
-.pf-findings-list { display: grid; gap: 12px; }
-.pf-finding { border: 1px solid var(--ui-border); background: var(--ui-surface); border-radius: 12px; }
+.pf-findings-list { display: grid; gap: 0; border-top: 1px solid var(--ui-border); }
+.pf-finding { border: 0; border-bottom: 1px solid var(--ui-border); background: var(--ui-surface); border-radius: 0; }
 .pf-finding:hover, .pf-finding.expanded { border-color: var(--ui-control-border); }
-.pf-finding-summary { display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 18px; background: none; border: 0; border-radius: 11px; text-align: left; }
+.pf-finding-summary { display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 20px 18px; background: none; border: 0; border-radius: 0; text-align: left; }
 .pf-finding-summary:hover { background: var(--ui-hover); }
 .pf-finding-symbol { height: 36px; width: 36px; border-radius: 8px; display: grid; place-items: center; flex-shrink: 0; margin-top: 2px; }
 .pf-finding-copy { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; flex: 1; overflow-wrap: anywhere; }
@@ -464,7 +468,7 @@ onUnmounted(() => { disposed = true; cancelAnimationFrame(pendingFrame); });
 .pf-reviewed-label { display: inline-flex; align-items: center; gap: 4px; font-size: .75rem; color: var(--ui-accent); }
 .pf-finding-copy > strong { color: var(--ui-text); font-size: .9375rem; line-height: 1.5; font-weight: 650; }
 .pf-finding-description { color: var(--ui-muted); font-size: .875rem; line-height: 1.7; margin-top: 5px; }
-.pf-source-count { display: flex; gap: 6px; align-items: center; margin-top: 12px; color: var(--ui-muted); font-size: .75rem; line-height: 1.5; }
+.pf-source-count { display: flex; gap: 6px; align-items: center; margin-top: 10px; color: var(--ui-muted); font-family: var(--font-data); font-size: .6875rem; line-height: 1.5; }
 .pf-finding-chevron { margin-top: 24px; color: var(--ui-muted); transition: transform .15s; }
 .expanded .pf-finding-chevron { transform: rotate(90deg); }
 .pf-finding-detail { margin: 0 18px 0 66px; padding: 2px 0 18px; }
@@ -533,7 +537,7 @@ onUnmounted(() => { disposed = true; cancelAnimationFrame(pendingFrame); });
   .pf-header-actions > button { flex: 1 1 9rem; }
   .pf-context { gap: 8px; margin-bottom: 24px; }
   .pf-example-badge { margin-left: 0; }
-  .pf-metrics { gap: 12px; margin-bottom: 24px; }
+  .pf-metrics { gap: 0; margin-bottom: 24px; }
   .pf-metric-top { margin-bottom: 12px; }
   .pf-document-list { grid-template-columns: 1fr; }
   .pf-remove { width: 44px; }

@@ -24,7 +24,12 @@ import {
 const props = defineProps({
   run: { type: Object, default: null },
   sessionTitle: { type: String, default: "" },
+  graphData: { type: Object, default: null },
+  activeNodeIds: { type: Array, default: () => [] },
+  selectedNodeId: { type: String, default: null },
+  showDetails: { type: Boolean, default: true },
 });
+const emit = defineEmits(["node-select"]);
 const graphId = useId();
 const panel = ref(null);
 const stage = ref(null);
@@ -45,12 +50,16 @@ const reducedMotion = ref(false);
 const moving = ref(false);
 const dragging = ref(false);
 const fullscreen = ref(false);
+// An external profile rail is outside the fullscreen element, so keep node
+// details available inside the graph when it occupies the whole screen.
+const detailsEnabled = computed(() => props.showDetails || fullscreen.value);
 const canFullscreen = ref(false);
 const notice = ref("");
 const nodeById = computed(
   () => new Map(nodes.value.map((node) => [node.id, node])),
 );
 const selectedNode = computed(() => nodeById.value.get(selectedId.value));
+const activeIds = computed(() => new Set(props.activeNodeIds));
 const visibleNodes = computed(() =>
   nodes.value.filter((node) => !hiddenTypes.value.includes(node.type)),
 );
@@ -89,12 +98,16 @@ const selectedLinks = computed(() =>
 const progress = computed(() =>
   Math.min(100, Math.max(0, Number(props.run?.progress) || 0)),
 );
-const statusLabel = computed(
-  () =>
-    ({ running: "Running", completed: "Complete", stopped: "Stopped" })[
+const statusLabel = computed(() => {
+  if (props.graphData) {
+    return ({ running: "Scripted review playing", completed: "Replay complete", stopped: "Replay paused", paused: "Replay paused" })[
       props.run?.status
-    ] || "Sample preview",
-);
+    ] || "Scripted demo";
+  }
+  return ({ running: "Running", completed: "Complete", stopped: "Stopped" })[
+    props.run?.status
+  ] || "Sample preview";
+});
 const transform = computed(
   () =>
     `translate(${camera.value.x},${camera.value.y}) scale(${camera.value.k})`,
@@ -105,9 +118,13 @@ const typeColors = {
   factor: "var(--ui-warning)",
   outcome: "var(--ui-purple)",
 };
-const typeById = new Map(
-  GRAPH_TYPES.map((type) => [type.id, { ...type, color: typeColors[type.id] }]),
-);
+const graphTypes = computed(() => props.graphData?.types || GRAPH_TYPES);
+const typeById = computed(() => new Map(
+  graphTypes.value.map((type) => [type.id, {
+    ...type,
+    color: props.graphData ? type.color || "var(--ui-muted)" : typeColors[type.id],
+  }]),
+));
 let frame = 0;
 let alpha = 0;
 let cameraTween = null;
@@ -122,7 +139,7 @@ const pointers = new Map();
 let pinch = null;
 
 function typeFor(id) {
-  return typeById.get(id) || { label: id, color: "var(--ui-muted)" };
+  return typeById.value.get(id) || { label: id, color: "var(--ui-muted)" };
 }
 function labelFor(node) {
   const label =
@@ -144,7 +161,7 @@ const labelPlacements = computed(() => {
           ? 80
           : node.type === "scenario"
             ? 60
-            : node.type === "agent"
+            : node.type === "agent" || node.kind === "agent"
               ? 20
               : 0;
     return priority(b) - priority(a);
@@ -229,6 +246,9 @@ function dimNode(node) {
 function highlightedLink(link) {
   return link.source === focusId.value || link.target === focusId.value;
 }
+function activeLink(link) {
+  return !focusId.value && (activeIds.value.has(link.source) || activeIds.value.has(link.target));
+}
 function edgePath(link, index) {
   const a = nodeById.value.get(link.source);
   const b = nodeById.value.get(link.target);
@@ -284,7 +304,7 @@ function moveCamera(to, smooth = true) {
   wake();
 }
 function usableWidth() {
-  return selectedNode.value && size.value.width >= 700
+  return detailsEnabled.value && selectedNode.value && size.value.width >= 700
     ? size.value.width - 300
     : size.value.width;
 }
@@ -301,26 +321,33 @@ function zoomBy(
 ) {
   moveCamera(zoomCamera(camera.value, factor, point, 0.25, 3), smooth);
 }
-function selectNode(id, center = false) {
+function selectNode(id, center = false, notify = true) {
   const node = nodeById.value.get(id);
   if (!node) return;
   selectedId.value = id;
   hoveredId.value = null;
   search.value = "";
   hiddenTypes.value = hiddenTypes.value.filter((type) => type !== node.type);
+  if (notify) emit("node-select", node);
   if (center) {
     const k = Math.max(0.8, camera.value.k);
     moveCamera({
       x: usableWidth() / 2 - node.x * k,
-      y: size.value.height * (size.value.width < 700 ? 0.3 : 0.48) - node.y * k,
+      y: size.value.height * (detailsEnabled.value && size.value.width < 700 ? 0.3 : 0.48) - node.y * k,
       k,
     });
   }
 }
-function clearSelection() {
+function clearSelection(notify = true) {
+  const hadSelection = selectedId.value !== null;
   selectedId.value = null;
   hoveredId.value = null;
+  if (notify && hadSelection) emit("node-select", null);
 }
+function focusNode(id) {
+  selectNode(id, true);
+}
+defineExpose({ focusNode });
 function closeInspector() {
   const id = selectedId.value;
   clearSelection();
@@ -361,13 +388,18 @@ function toggleMotion() {
 }
 function rebuild() {
   cancelGesture();
-  clearSelection();
+  clearSelection(false);
   search.value = "";
   hiddenTypes.value = [];
-  const graph = createSimulationGraph(props.run, props.sessionTitle);
+  // Layout and pinning mutate coordinates. Keep supplied case data immutable,
+  // including nested profile properties shared with the external review rail.
+  const graph = props.graphData
+    ? JSON.parse(JSON.stringify({ nodes: props.graphData.nodes, links: props.graphData.links }))
+    : createSimulationGraph(props.run, props.sessionTitle);
   settleLayout(graph.nodes, graph.links, 110);
   nodes.value = graph.nodes;
   links.value = graph.links;
+  if (props.selectedNodeId) selectNode(props.selectedNodeId, false, false);
   fitView(false);
   reheat(0.5);
 }
@@ -597,14 +629,22 @@ function motionChanged(event) {
   }
 }
 watch(
-  () => props.run?.id,
+  () => props.graphData || props.run?.id,
   () => {
     if (initialized) rebuild();
   },
 );
 watch(
+  () => props.selectedNodeId,
+  (id) => {
+    if (id) selectNode(id, false, false);
+    else clearSelection(false);
+  },
+);
+watch(
   () => props.sessionTitle,
   () => {
+    if (props.graphData) return;
     const scenario = nodes.value.find((node) => node.type === "scenario");
     if (scenario) {
       const title =
@@ -657,17 +697,17 @@ onBeforeUnmount(() => {
   <section
     ref="panel"
     class="simulation-graph"
-    :class="{ 'is-fullscreen': fullscreen }"
+    :class="{ 'is-fullscreen': fullscreen, 'is-custom-graph': graphData, 'has-reduced-motion': reducedMotion }"
     :aria-labelledby="`${graphId}-heading`"
   >
     <header class="graph-header">
       <div>
-        <p class="graph-eyebrow">Relationship explorer</p>
-        <h2 :id="`${graphId}-heading`">Research connections</h2>
+        <h2 :id="`${graphId}-heading`">{{ graphData?.title || 'Research connections' }}</h2>
+        <p v-if="graphData?.description" class="graph-description">{{ graphData.description }}</p>
       </div>
       <div class="graph-header-actions">
         <span class="graph-demo-tag">{{
-          run ? "Demo graph" : "Sample graph"
+          graphData ? "Scripted demo" : run ? "Demo graph" : "Sample graph"
         }}</span
         ><button
           v-if="canFullscreen"
@@ -756,7 +796,7 @@ onBeforeUnmount(() => {
     <div
       ref="stage"
       class="graph-stage"
-      :class="{ 'is-dragging': dragging, 'has-selection': selectedNode }"
+      :class="{ 'is-dragging': dragging, 'has-selection': detailsEnabled && selectedNode }"
       @keydown="graphKeydown"
     >
       <svg
@@ -773,15 +813,13 @@ onBeforeUnmount(() => {
         @wheel.prevent="onWheel"
       >
         <title :id="`${graphId}-svg-title`">
-          Interactive demo network{{
-            sessionTitle ? ` for ${sessionTitle}` : ""
-          }}
+          {{ graphData?.title || `Interactive demo network${sessionTitle ? ` for ${sessionTitle}` : ''}` }}
         </title>
         <desc :id="`${graphId}-svg-desc`">
           Drag a node to move it. Drag the canvas to pan, or scroll to zoom. Use
           Tab to reach nodes, Enter to inspect, and Escape to clear selection.
           On the canvas, arrow keys pan, plus and minus zoom, and zero fits the
-          graph. All graph data is illustrative.
+          graph. {{ graphData?.description || 'All graph data is illustrative.' }}
         </desc>
         <defs>
           <pattern
@@ -820,6 +858,7 @@ onBeforeUnmount(() => {
               :class="{
                 'link-highlight': highlightedLink(link),
                 'link-muted': focusId && !highlightedLink(link),
+                'link-active': activeLink(link),
               }"
               vector-effect="non-scaling-stroke"
             />
@@ -834,6 +873,7 @@ onBeforeUnmount(() => {
               'node-focused': focusId === node.id,
               'node-muted': dimNode(node),
               'node-pinned': node.pinned,
+              'node-active': activeIds.has(node.id),
             }"
             :transform="`translate(${node.x},${node.y})`"
             tabindex="0"
@@ -852,6 +892,15 @@ onBeforeUnmount(() => {
               class="node-hit-area"
               :r="Math.max(22 / camera.k, node.radius + 8)"
               fill="transparent"
+            />
+            <circle
+              v-if="activeIds.has(node.id)"
+              class="node-activity-halo"
+              :r="node.radius + 11"
+              :fill="typeFor(node.type).color"
+              :stroke="typeFor(node.type).color"
+              stroke-width="1"
+              aria-hidden="true"
             />
             <circle
               class="node-ring"
@@ -925,7 +974,7 @@ onBeforeUnmount(() => {
         </button>
       </div>
       <aside
-        v-if="selectedNode"
+        v-if="detailsEnabled && selectedNode"
         class="graph-inspector"
         aria-label="Node details"
       >
@@ -1009,7 +1058,7 @@ onBeforeUnmount(() => {
       <span class="legend-heading">Entity types</span>
       <div class="legend-types">
         <button
-          v-for="type in GRAPH_TYPES"
+          v-for="type in graphTypes"
           :key="type.id"
           :aria-pressed="!hiddenTypes.includes(type.id)"
           :aria-label="`${hiddenTypes.includes(type.id) ? 'Show' : 'Hide'} ${type.label} nodes`"
@@ -1045,23 +1094,24 @@ onBeforeUnmount(() => {
       <span
         ><i :class="run?.status"></i>{{ statusLabel
         }}<template v-if="run"> · {{ Math.round(progress) }}%</template></span
-      ><span>Illustrative graph · Connections are sample data</span>
+      ><span>{{ graphData ? 'Fictional case · Scripted agent perspectives' : 'Illustrative graph · Connections are sample data' }}</span>
     </div>
   </section>
 </template>
 
 <style scoped>
-.simulation-graph { position: relative; isolation: isolate; display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 720px; height: 100%; background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: 18px; overflow: hidden; color: var(--ui-text); container-type: inline-size; }
+.simulation-graph { position: relative; isolation: isolate; display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 720px; height: 100%; background: var(--ui-surface); border: 1px solid var(--ui-border); border-radius: 4px; overflow: hidden; color: var(--ui-text); container-type: inline-size; }
 .graph-header, .graph-toolbar, .graph-legend, .graph-footer, .graph-run-status, .graph-notice { flex-shrink: 0; }
 .graph-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; padding: 24px; background: var(--ui-surface); }
 .graph-header > div:first-child { min-width: 0; flex: 1 1 12rem; }
 .graph-eyebrow { margin: 0 0 8px; color: var(--ui-muted); font-size: .75rem; letter-spacing: .06em; font-weight: 600; }
-.graph-header h2 { margin: 0; font-size: 1.625rem; line-height: 1.2; font-weight: 650; letter-spacing: -.035em; overflow-wrap: anywhere; }
+.graph-header h2 { margin: 0; font-family: var(--font-display); font-size: 1.875rem; line-height: 1.2; font-weight: 400; letter-spacing: -.035em; overflow-wrap: anywhere; }
+.graph-description { max-width: 62ch; margin: 8px 0 0; color: var(--ui-muted); font-size: .8125rem; line-height: 1.6; }
 .graph-header-actions { display: flex; align-items: center; gap: 10px; }
-.graph-demo-tag { padding: 6px 9px; border: 1px solid var(--ui-border); border-radius: 6px; font-size: .75rem; line-height: 1.4; color: var(--ui-muted); background: var(--ui-surface-alt); }
+.graph-demo-tag { padding: 5px 8px; border: 1px solid var(--ui-border); border-radius: 3px; font-family: var(--font-data); font-size: .6875rem; line-height: 1.4; color: var(--ui-muted); background: var(--ui-surface-alt); }
 .graph-icon-button { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 36px; padding: 7px; background: transparent; border: 1px solid transparent; border-radius: 8px; color: var(--ui-muted); flex-shrink: 0; }
 .graph-icon-button:hover { background: var(--ui-hover); color: var(--ui-accent); }
-.graph-toolbar { position: relative; z-index: 5; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--ui-border); border-bottom: 1px solid var(--ui-border); background: var(--ui-canvas); }
+.graph-toolbar { position: relative; z-index: 5; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--ui-border); border-bottom: 1px solid var(--ui-border); background: var(--ui-surface-alt); }
 .graph-search { position: relative; display: flex; align-items: center; gap: 8px; flex: 1 1 12rem; min-width: 0; max-width: 320px; border: 1px solid var(--ui-control-border); border-radius: 8px; padding: 0 10px; color: var(--ui-muted); background: var(--ui-surface); }
 .graph-search input { min-width: 0; width: 100%; min-height: 36px; padding: 8px 0; font-size: .875rem; background: transparent; border: 0; color: var(--ui-text); outline: none; }
 .graph-search input::placeholder { color: var(--ui-muted); }
@@ -1086,10 +1136,15 @@ onBeforeUnmount(() => {
 .graph-stage.is-dragging .graph-svg, .graph-stage.is-dragging .graph-node { cursor: grabbing; }
 .graph-links path { fill: none; stroke: var(--ui-control-border); stroke-width: 1; opacity: .65; transition: opacity .16s, stroke .16s; pointer-events: none; }
 .graph-links path.link-highlight { stroke: var(--ui-accent); stroke-width: 2; opacity: 1; }
+.graph-links path.link-active { stroke: var(--ui-accent); stroke-width: 1.35; opacity: .85; }
 .graph-links path.link-muted { opacity: .12; }
 .graph-node { cursor: grab; outline: none; transition: opacity .16s; }
 .graph-node.node-muted { opacity: .22; }
 .node-ring { opacity: 0; transition: opacity .16s; }
+.node-activity-halo { fill-opacity: .08; stroke-opacity: .38; pointer-events: none; animation: graph-activity 2.8s ease-in-out infinite; }
+.node-selected .node-activity-halo { stroke-opacity: .18; }
+.has-reduced-motion .node-activity-halo { animation: none; }
+@keyframes graph-activity { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
 .node-selected .node-ring, .node-focused .node-ring, .graph-node:focus-visible .node-ring { opacity: 1; }
 .node-selected .node-dot { stroke: var(--ui-focus); stroke-width: 3; }
 .graph-node:focus-visible .node-dot { stroke: var(--ui-text); stroke-width: 3; }
@@ -1110,6 +1165,9 @@ onBeforeUnmount(() => {
 .legend-types button { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 7px 10px; border: 1px solid var(--ui-control-border); border-radius: 8px; background: var(--ui-selected); color: var(--ui-text); font-size: .75rem; line-height: 1.5; }
 .legend-types button:hover { background: var(--ui-hover); }
 .legend-types button span { margin-left: 3px; color: var(--ui-muted); font: .75rem ui-monospace, monospace; }
+.is-custom-graph .legend-types { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr)); }
+.is-custom-graph .legend-types button { min-width: 0; text-align: left; }
+.is-custom-graph .legend-types button span { margin-left: auto; }
 .legend-types .type-hidden { background: var(--ui-surface); color: var(--ui-muted); text-decoration: line-through; }
 .graph-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 14px 20px; border-top: 1px solid var(--ui-border); color: var(--ui-muted); font-size: .75rem; line-height: 1.6; background: var(--ui-surface); }
 .graph-footer strong { color: var(--ui-text); font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -1163,7 +1221,7 @@ onBeforeUnmount(() => {
   .graph-search input { font-size: 1rem; }
   .graph-tool-button, .graph-icon-button, .graph-search input, .legend-types button, .graph-zoom-controls button, .pin-button { min-height: 44px; }
   .graph-icon-button, .graph-zoom-controls button { min-width: 44px; }
-  .graph-stage { min-height: 480px; }
+  .graph-stage { min-height: 360px; }
   .graph-inspector { top: auto; left: 12px; right: 12px; bottom: 12px; width: auto; max-height: 290px; padding: 14px 16px; }
   .has-selection .graph-zoom-controls { bottom: auto; top: 14px; left: 14px; }
   .graph-interaction-hint { left: 18px; right: 16px; bottom: 86px; }
@@ -1178,6 +1236,6 @@ onBeforeUnmount(() => {
   .zoom-divider { margin: 0 2px; }
   .zoom-value { min-width: 3em; }
 }
-@media (prefers-reduced-motion: reduce) { .graph-links path, .graph-node, .node-ring { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .graph-links path, .graph-node, .node-ring { transition: none; } .node-activity-halo { animation: none; } }
 @media (prefers-contrast: more) { .graph-links path { opacity: 1; stroke-width: 1.5; } .graph-links path.link-muted { opacity: .35; } }
 </style>

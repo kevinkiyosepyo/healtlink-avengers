@@ -5,6 +5,11 @@
   "buildCommand": "npm run build --prefix frontend",
   "outputDirectory": "frontend/dist",
   "functions": {
-    "api/simulate.js": { "maxDuration": 60 }
+    "api/simulate.js": { "maxDuration": 60 },
+    "api/institution.js": {
+      "maxDuration": 60,
+      "includeFiles": "{server/sourcePdfWorker.js,node_modules/unpdf/dist/**}"
+    },
+    "api/transcribe.js": { "maxDuration": 60 }
   }
 }

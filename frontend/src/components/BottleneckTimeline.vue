@@ -9,7 +9,8 @@ import {
   addWorkingDays,
 } from "../lib/bottleneckTimeline.js";
 
-const STORAGE_KEY = "microfish.bottleneck-timeline.v1";
+const props = defineProps({ storageKey: { type: String, default: "microfish.bottleneck-timeline.v1" } });
+const STORAGE_KEY = props.storageKey;
 const delays = ref({});
 const selectedId = ref("workspace-access");
 const heading = ref(null);
@@ -145,12 +146,11 @@ defineExpose({ focusHeading: () => heading.value?.focus() });
     <div class="timeline-page-inner">
       <div class="timeline-page-heading">
         <div>
-          <p class="timeline-eyebrow">Research planning</p>
           <h1 id="timeline-heading" ref="heading" tabindex="-1">
             Bottleneck timeline
           </h1>
           <p class="timeline-intro">
-            See what depends on what. Rehearse a delay before it holds you back.
+            Follow the dependencies. See how one delay changes the rest of the plan.
           </p>
         </div>
         <button
@@ -163,7 +163,6 @@ defineExpose({ focusHeading: () => heading.value?.focus() });
       </div>
 
       <div class="timeline-study">
-        <span class="study-symbol"><AppIcon name="layers" :size="20" /></span>
         <div>
           <strong>REST-101 <span>/</span> Researcher onboarding</strong>
           <p>
@@ -491,14 +490,7 @@ defineExpose({ focusHeading: () => heading.value?.focus() });
   font-weight: 650;
   margin-bottom: 0.625rem;
 }
-h1 {
-  margin: 0;
-  color: var(--ui-text);
-  font-size: clamp(1.75rem, 2.3vw, 2.125rem);
-  font-weight: 650;
-  letter-spacing: -0.035em;
-  line-height: 1.2;
-}
+h1 { margin: 0; color: var(--ui-text); font-family: var(--font-display); font-size: clamp(2.5rem, 3.4vw, 3.5rem); font-weight: 400; letter-spacing: -.045em; line-height: 1.1; }
 .timeline-intro {
   color: var(--ui-muted);
   font-size: 0.875rem;
@@ -528,26 +520,7 @@ h1 {
   background: var(--ui-surface-alt);
   border-color: var(--ui-border);
 }
-.timeline-study {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  border: 1px solid var(--ui-border);
-  background: var(--ui-surface-alt);
-  border-radius: 0.875rem;
-  padding: 1rem 1.125rem;
-}
-.study-symbol {
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  color: var(--ui-accent);
-  width: 2.5rem;
-  height: 2.5rem;
-  background: var(--ui-surface);
-  border-radius: 0.625rem;
-}
+.timeline-study { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; border-block: 1px solid var(--ui-border); background: transparent; padding: 1rem 0; }
 .timeline-study > div {
   flex: 1 1 18rem;
   min-width: 0;
@@ -607,18 +580,7 @@ h1 {
   color: var(--ui-muted);
   margin-bottom: 0.625rem;
 }
-.timeline-metrics strong {
-  color: var(--ui-text);
-  font-size: 1.75rem;
-  letter-spacing: -0.035em;
-  font-weight: 600;
-  line-height: 1.25;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: baseline;
-  font-variant-numeric: tabular-nums;
-}
+.timeline-metrics strong { color: var(--ui-text); font-family: var(--font-display); font-size: 2rem; letter-spacing: -.035em; font-weight: 400; line-height: 1.25; display: flex; flex-wrap: wrap; gap: .5rem; align-items: baseline; font-variant-numeric: tabular-nums; }
 .timeline-metrics strong small {
   font-size: 0.75rem;
   background: var(--ui-warning-bg);
@@ -656,13 +618,7 @@ h1 {
   gap: 1.25rem;
   align-items: start;
 }
-.timeline-board {
-  min-width: 0;
-  border: 1px solid var(--ui-border);
-  background: var(--ui-surface);
-  border-radius: 1rem;
-  overflow: hidden;
-}
+.timeline-board { min-width: 0; border: 1px solid var(--ui-border); background: var(--ui-surface); border-radius: 4px; overflow: hidden; }
 .timeline-board-heading {
   display: flex;
   align-items: center;
@@ -947,14 +903,7 @@ h2 {
   background: var(--ui-warning-bg);
   border: 1px solid var(--ui-warning);
 }
-.task-detail {
-  min-width: 0;
-  scroll-margin-top: 1rem;
-  border: 1px solid var(--ui-border);
-  border-radius: 1rem;
-  padding: 1.25rem;
-  background: var(--ui-surface);
-}
+.task-detail { min-width: 0; border: 1px solid var(--ui-border); border-top: 3px solid var(--ui-accent); border-radius: 4px; padding: 1.25rem; background: var(--ui-surface); }
 .task-detail-kicker {
   display: flex;
   align-items: center;
