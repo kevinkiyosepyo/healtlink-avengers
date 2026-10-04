@@ -1,3 +1,4 @@
+import { AGENT_MIN, reviewAgents, validateAgentReviews } from '../../../shared/reviewAgents.js'
 export const STORAGE_KEY = 'microfish.workspace.v1'
 export const PROMPT_LIMIT = 2000
 export const TITLE_LIMIT = 80
@@ -46,7 +47,9 @@ function assistantContent(run) {
     if (run.status === 'stopped') return run.interrupted
       ? `This ${exploration} was interrupted when the page reloaded. Your question is saved; run it again to retry.`
       : `Stopped waiting for this AI run. Your question is saved. Requests already sent to ${providerName(run.mode)} may still finish and incur API usage.`
-    return `${providerName(run.mode)} agents are reviewing your question. You can switch chats while this exploration runs.`
+    return run.agentReviews
+      ? `${run.agentReviews.length} of ${run.agentCount} agent reviews completed. Open the knowledge graph to watch document references and review topics appear. You can switch chats while this run continues.`
+      : `${providerName(run.mode)} agents are reviewing your question. You can switch chats while this exploration runs.`
   }
   if (run.status === 'completed') {
     return 'Demo complete. All 12 sample agents finished the scenario walkthrough. This demonstrates a separate simulation run for this chat; no AI model or simulation backend was called, and no research findings were generated. You can ask a follow-up to start another demo run, or keep this chat and start a different scenario.'
@@ -67,12 +70,28 @@ function normalizeRun(raw, now) {
   const status = real && raw.status === 'running' ? 'stopped' : raw.status
   const startedAt = Math.min(timestamp(raw.startedAt, now), now)
   const durationMs = Number.isFinite(raw.durationMs) && raw.durationMs > 0 && raw.durationMs <= 120000 ? raw.durationMs : DEMO_DURATION_MS
-  const progress = status === 'completed' ? 100 : real ? 0 : Math.max(0, Math.min(100, Number(raw.progress) || 0))
+  let agentCount = real ? 3 : 12
+  let agentReviews, sources
+  if (real && raw.agentCount >= AGENT_MIN) {
+    try {
+      const agents = reviewAgents(raw.agentCount)
+      if (!Array.isArray(raw.sources) || raw.sources.length > 12) return null
+      sources = raw.sources.map(source => {
+        if (!validId(source.id) || typeof source.name !== 'string' || !source.name.trim() || source.name.length > 300 || typeof source.kind !== 'string' || source.kind.length > 40) throw new Error('Invalid saved source')
+        return { id: source.id, name: source.name, kind: source.kind }
+      })
+      if (new Set(sources.map(source => source.id)).size !== sources.length) return null
+      agentReviews = validateAgentReviews(raw.agentReviews, agents, sources.map(source => source.id), { partial: status !== 'completed' })
+      agentCount = agents.length
+    } catch { return null }
+  }
+  const progress = status === 'completed' ? 100 : agentReviews ? Math.floor(agentReviews.length / agentCount * 100) : real ? 0 : Math.max(0, Math.min(100, Number(raw.progress) || 0))
   return {
     id: raw.id, prompt: boundedText(raw.prompt, PROMPT_LIMIT), status, mode,
     startedAt, completedAt: status === 'running' ? null : timestamp(raw.completedAt, now),
     durationMs: real ? 0 : durationMs,
-    agentCount: real ? 3 : 12, progress, stage: runStage(progress, status, mode),
+    agentCount, progress, stage: runStage(progress, status, mode),
+    ...(agentReviews ? { agentReviews, sources } : {}),
     ...(real ? { model: boundedText(raw.model, 100), error: boundedText(raw.error, 800), interrupted } : {}),
   }
 }
@@ -316,6 +335,12 @@ export function createWorkspaceController({ storage, storageKey = STORAGE_KEY, n
     const startedAt = now()
     const runMode = isAIRun(mode) ? mode : 'demo'
     const run = { id: id(), prompt: cleaned, mode: runMode, status: 'running', startedAt, completedAt: null, durationMs: isAIRun(runMode) ? 0 : durationMs, agentCount: isAIRun(runMode) ? 3 : 12, progress: 0, stage: runStage(0, 'running', runMode) }
+    if (isAIRun(runMode) && contextResult.context?.agentCount) {
+      run.agentCount = contextResult.context.agentCount
+      run.agentReviews = []
+      run.sources = contextResult.context.documents.map(({ id, name, kind }) => ({ id, name, kind }))
+      run.stage = `Reviewing 0 of ${run.agentCount} agents`
+    }
     session.runs.push(run)
     session.messages.push(
       { id: id(), role: 'user', content: cleaned, createdAt: startedAt, runId: run.id },
@@ -345,6 +370,20 @@ export function createWorkspaceController({ storage, storageKey = STORAGE_KEY, n
     return true
   }
 
+  function appendAgentReviews(sessionId, runId, reviews) {
+    const session = getSession(sessionId)
+    const run = session?.runs.find(run => run.id === runId)
+    if (!run?.agentReviews || run.status !== 'running') return false
+    const merged = validateAgentReviews([...run.agentReviews, ...reviews], reviewAgents(run.agentCount), run.sources.map(source => source.id), { partial: true })
+    run.agentReviews = merged
+    run.progress = Math.floor(merged.length / run.agentCount * 100)
+    run.stage = `Reviewing ${merged.length} of ${run.agentCount} agents`
+    session.updatedAt = now()
+    updateAssistant(session, run)
+    persist()
+    return true
+  }
+
   function finishRun(sessionId, runId, { content, model } = {}) {
     const session = getSession(sessionId)
     const run = session?.runs.find(run => run.id === runId)
@@ -353,11 +392,11 @@ export function createWorkspaceController({ storage, storageKey = STORAGE_KEY, n
     if (!cleaned) return failRun(sessionId, runId, 'The server returned an empty response. Please try again.')
     const message = session.messages.find(message => message.role === 'assistant' && message.runId === run.id)
     if (!message) return false
+    if (run.agentReviews && run.agentReviews.length !== run.agentCount) return failRun(sessionId, runId, 'Not all agents finished. Completed reviews remain in the graph; retry the simulation.')
     run.status = 'completed'
     run.completedAt = now()
     run.progress = 100
     run.model = boundedText(model, 100)
-    run.agentCount = 3
     run.stage = runStage(run.progress, run.status, run.mode)
     message.content = cleaned
     session.updatedAt = run.completedAt
@@ -393,6 +432,6 @@ export function createWorkspaceController({ storage, storageKey = STORAGE_KEY, n
   tick()
   // Give fresh browser tabs the same blank chat ID before the first keystroke.
   if (storageReadable && expectedSnapshot === null) persist()
-  return { state, createSession, selectSession, renameSession, setSessionContext, deleteSession, startRun, finishRun, failRun, stopRun, setDraft, tick, persist, refreshStorageStatus }
+  return { state, createSession, selectSession, renameSession, setSessionContext, deleteSession, startRun, appendAgentReviews, finishRun, failRun, stopRun, setDraft, tick, persist, refreshStorageStatus }
 }
 import { snapshotSimulationContext, validateSimulationContext } from './simulationContext.js'

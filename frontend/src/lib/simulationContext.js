@@ -1,3 +1,5 @@
+import { validateAgentCount } from '../../../shared/reviewAgents.js'
+
 // Research source material is never shortened silently. The caller can show a
 // validation error and let the researcher decide what to remove or revise.
 export const CONTEXT_LIMITS = Object.freeze({
@@ -83,11 +85,12 @@ export function normalizeSimulationContext(raw) {
   }
   const institutionToken = text(raw.institutionToken, 'Institution verification token', CONTEXT_LIMITS.institutionToken)
   if ((institution || institutionToken) && !university) throw new Error('The institution profile needs its university selection.')
-  const context = { overview, transcript, documents, university, institution, institutionToken }
+  const agentCount = raw.agentCount === undefined ? undefined : validateAgentCount(raw.agentCount)
+  const context = { overview, transcript, documents, university, institution, institutionToken, ...(agentCount === undefined ? {} : { agentCount }) }
   if (simulationContextTextLength(context) > CONTEXT_LIMITS.totalText) {
     throw new Error(`The study overview, dictation, and documents together must be ${CONTEXT_LIMITS.totalText.toLocaleString('en-US')} characters or fewer.`)
   }
-  if (!overview.trim() && !transcript.trim() && !documents.length && !university && !institution && !institutionToken) return null
+  if (!overview.trim() && !transcript.trim() && !documents.length && !university && !institution && !institutionToken && agentCount === undefined) return null
   return context
 }
 

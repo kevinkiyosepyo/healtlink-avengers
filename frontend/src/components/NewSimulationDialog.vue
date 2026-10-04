@@ -2,6 +2,7 @@
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import { IMPORT_LIMITS, SIMULATION_IMPORT_ACCEPT, importSimulationFile, validateSimulationContext } from '../lib/simulationImports.js'
 import { createVoiceDictation } from '../lib/voiceDictation.js'
+import { AGENT_MIN, AGENT_MAX, AGENT_STEP, AGENT_BATCH_SIZE } from '../../../shared/reviewAgents.js'
 import ProviderDictation from './ProviderDictation.vue'
 import UniversityIRBPanel from './UniversityIRBPanel.vue'
 import { isInstitutionSnapshotFresh } from '../lib/institutionProfile.js'
@@ -19,6 +20,7 @@ const fileInput = ref(null)
 const transcriptInput = ref(null)
 const title = ref('')
 const question = ref('')
+const agentCount = ref(AGENT_MIN)
 const overview = ref('')
 const transcript = ref('')
 const documents = ref([])
@@ -50,6 +52,7 @@ const context = computed(() => ({
   university: props.personal && props.university ? { id: props.university.id, name: props.university.name } : null,
   institution: props.personal ? institution.value : null,
   institutionToken: props.personal ? institutionToken.value : '',
+  ...(props.personal ? { agentCount: agentCount.value } : {}),
 }))
 const contextError = computed(() => validateSimulationContext(context.value))
 const characterCount = computed(() => overview.value.length + transcript.value.length + documents.value.reduce((sum, doc) => sum + doc.text.length, 0))
@@ -245,6 +248,7 @@ watch(() => props.open, async opened => {
   previousFocus = document.activeElement
   title.value = props.initialTitle || ''
   question.value = props.initialQuestion || ''
+  agentCount.value = props.initialContext?.agentCount || AGENT_MIN
   overview.value = props.initialContext?.overview || ''
   transcript.value = props.initialContext?.transcript || ''
   documents.value = (props.initialContext?.documents || []).map(doc => ({ ...doc }))
@@ -279,6 +283,13 @@ onUnmounted(cleanup)
         <div class="setup-content">
           <div class="setup-field"><label for="simulation-title">Study title <span>Optional</span></label><input id="simulation-title" ref="titleInput" v-model="title" maxlength="80" placeholder="e.g. Remote monitoring pilot" :disabled="busy" /></div>
           <div class="setup-field"><label for="simulation-overview">Describe your study <span>Optional</span></label><textarea id="simulation-overview" v-model="overview" rows="3" placeholder="What are you studying? Who will participate, and what do you want to explore?" :disabled="busy" /><small :class="{ 'setup-invalid': overview.length > IMPORT_LIMITS.overviewChars }">{{ overview.length.toLocaleString() }} / 10,000 characters</small></div>
+
+          <div v-if="personal" class="setup-field setup-agents">
+            <label for="simulation-agents">Simulation agents <output for="simulation-agents">{{ agentCount }} agents</output></label>
+            <input id="simulation-agents" v-model.number="agentCount" type="range" :min="AGENT_MIN" :max="AGENT_MAX" :step="AGENT_STEP" :disabled="busy" aria-describedby="simulation-agents-note" />
+            <div class="setup-agent-range"><span>{{ AGENT_MIN }}</span><span>{{ AGENT_MAX }}</span></div>
+            <small id="simulation-agents-note">{{ agentCount / AGENT_BATCH_SIZE }} batches of fictional AI perspectives. Watch their reviews and document connections appear in the graph. Larger panels take longer and use more API credit.</small>
+          </div>
 
           <section class="setup-materials" aria-labelledby="setup-context-heading">
             <div class="setup-section-heading"><h3 id="setup-context-heading">Add context</h3><span>Use either, or combine both</span></div>
@@ -350,6 +361,10 @@ onUnmounted(cleanup)
 .setup-field label, .setup-document-body label { font-size:.82rem; font-weight:600; }
 .setup-field label span { margin-left:6px; font-weight:400; color:var(--ui-muted); font-size:.74rem; }
 .setup-field input, .setup-field textarea, .setup-document textarea { width:100%; border:1px solid var(--ui-border); border-radius:9px; padding:11px 13px; background:var(--ui-surface); color:var(--ui-text); font-size:.875rem; line-height:1.6; resize:vertical; min-height:43px; }
+.setup-agents label { display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.setup-agents output { color:var(--ui-accent); font-variant-numeric:tabular-nums; }
+.setup-agents input[type='range'] { padding:0; border:0; min-height:28px; accent-color:var(--ui-accent); cursor:pointer; }
+.setup-agent-range { display:flex; justify-content:space-between; color:var(--ui-muted); font-size:.7rem; }
 .setup-field textarea:read-only { background:var(--ui-surface-alt); }
 .setup-field small { color:var(--ui-muted); font-size:.7rem; line-height:1.5; }
 .setup-field .setup-invalid { color:var(--ui-danger); }

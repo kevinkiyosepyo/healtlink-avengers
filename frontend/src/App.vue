@@ -4,6 +4,8 @@ import AppIcon from "./components/AppIcon.vue";
 import LookaheadLogo from "./components/LookaheadLogo.vue";
 import LookaheadIntro from "./components/LookaheadIntro.vue";
 import SimulationGraph from "./components/SimulationGraph.vue";
+import { AGENT_MIN } from "../../shared/reviewAgents.js";
+import { createGeneratedSimulationGraph } from "./lib/generatedSimulationGraph.js";
 import BottleneckTimeline from "./components/BottleneckTimeline.vue";
 import DocumentPreflight from "./components/DocumentPreflight.vue";
 import ResearcherLogin from "./components/ResearcherLogin.vue";
@@ -255,6 +257,16 @@ const filteredSessions = computed(() =>
     ),
 );
 const latestRun = computed(() => activeSession.value?.runs.at(-1) ?? null);
+const selectedAgentCount = computed(() => activeSession.value?.context?.agentCount || 3);
+const generatedGraph = computed(() => {
+  const run = latestRun.value || (workspaceKind.value === 'personal' && activeSession.value?.context?.agentCount ? {
+    id: `setup:${activeId.value}`, prompt: activeSession.value.draft, status: 'ready',
+    agentCount: selectedAgentCount.value, agentReviews: [], sources: activeSession.value.context.documents,
+  } : null);
+  if (!run || (latestRun.value && !isAIRun(run))) return null;
+  const response = activeSession.value.messages.find(message => message.role === 'assistant' && message.runId === run.id)?.content || '';
+  return createGeneratedSimulationGraph(run, activeSession.value.context, activeSession.value.title, response);
+});
 const simulationUniversity = computed(() => activeSession.value?.context?.university || university.value);
 const sharedInstitutionMatches = computed(() => institutionSnapshotMatches(universityProfile.value, simulationUniversity.value));
 const sharedInstitutionUniversityMatches = computed(() => institutionSnapshotMatches({ university: university.value }, simulationUniversity.value));
@@ -343,7 +355,7 @@ async function saveSetup({ title, question, context }) {
   setupOpen.value = false;
   search.value = "";
   submitError.value = "";
-  activeView.value = "Chat";
+  activeView.value = workspaceKind.value === "personal" ? "Split" : "Chat";
   navigate('simulations');
   await nextTick();
   composer.value?.focus();
@@ -385,6 +397,7 @@ async function submitRun() {
   }
   const nextDraft = session.draft !== prompt ? session.draft : null;
   const run = (mode === "anthropic" ? startAnthropicRun : mode === "openai" ? startOpenAIRun : startRun)(session.id, prompt);
+  if (run && mode !== "demo" && run.agentReviews && activeId.value === session.id) activeView.value = "Split";
   if (run && nextDraft !== null) session.draft = nextDraft;
   submitError.value = run
     ? ""
@@ -694,7 +707,7 @@ watch(
           </nav>
         </div>
         <section v-if="activeSession.context || (workspaceKind === 'personal' && simulationUniversity)" class="simulation-context-bar" aria-label="Simulation setup">
-          <div class="simulation-context-summary"><strong>{{ activeSession.context?.university?.name || (workspaceKind === 'personal' ? simulationUniversity?.name : null) || 'Study context' }}</strong><span>{{ activeSession.context?.documents.length || 0 }} {{ activeSession.context?.documents.length === 1 ? 'document' : 'documents' }}<template v-if="activeSession.context?.transcript"> · Voice transcript</template><template v-if="workspaceKind === 'personal' && simulationInstitution"> · {{ simulationInstitution.reviewers?.length || 0 }} simulated reviewers</template><template v-if="workspaceKind === 'personal' && simulationInstitutionState === 'loading'"> · Checking sources…</template></span></div>
+          <div class="simulation-context-summary"><strong>{{ activeSession.context?.university?.name || (workspaceKind === 'personal' ? simulationUniversity?.name : null) || 'Study context' }}</strong><span>{{ activeSession.context?.documents.length || 0 }} {{ activeSession.context?.documents.length === 1 ? 'document' : 'documents' }}<template v-if="workspaceKind === 'personal' && activeSession.context?.agentCount"> · {{ activeSession.context.agentCount }} AI agents</template><template v-if="activeSession.context?.transcript"> · Voice transcript</template><template v-if="workspaceKind === 'personal' && simulationInstitution"> · {{ simulationInstitution.reviewers?.length || 0 }} simulated reviewers</template><template v-if="workspaceKind === 'personal' && simulationInstitutionState === 'loading'"> · Checking sources…</template></span></div>
           <div class="simulation-context-actions">
             <button v-if="workspaceKind === 'personal' && simulationUniversity && activeView !== 'Graph'" type="button" class="secondary-button irb-details-toggle" :aria-expanded="irbDetailsOpen" aria-controls="simulation-irb-details" @click="toggleIRBDetails">{{ irbDetailsOpen ? 'Hide IRB details' : 'Show IRB details' }}<AppIcon name="chevron" :size="13" :class="{ expanded: irbDetailsOpen }" /></button>
             <button type="button" class="secondary-button" :disabled="isRunning || preparingInstitution" @click="editSetup">Review setup & sources</button>
@@ -803,14 +816,12 @@ watch(
                             >
                           </div>
                           <span class="run-percentage"
-                            v-if="!isAIRun(runForMessage(message)) || runForMessage(message).status === 'completed'"
                             >{{
                               Math.round(runForMessage(message).progress)
                             }}%</span
                           >
                         </div>
                         <div
-                          v-if="!isAIRun(runForMessage(message)) || runForMessage(message).status === 'completed'"
                           class="progress-track"
                           role="progressbar"
                           :aria-label="`Run progress for ${runForMessage(message).prompt}`"
@@ -829,7 +840,7 @@ watch(
                         <div class="run-card-footer">
                           <span>{{ runForMessage(message).stage }}</span
                           ><button
-                            v-if="runForMessage(message).id === latestRun?.id && !isAIRun(runForMessage(message))"
+                            v-if="runForMessage(message).id === latestRun?.id"
                             @click="activeView = 'Split'"
                           >
                             View graph
@@ -870,8 +881,8 @@ watch(
                     <span class="sr-only">Simulation provider</span>
                     <select v-model="runMode" :disabled="isRunning || preparingInstitution">
                       <option value="demo">12 demo agents</option>
-                      <option value="openai" :disabled="workspaceKind === 'demo'">{{ workspaceKind === 'demo' ? 'OpenAI · open your workspace' : openaiReady ? 'OpenAI · 3 perspectives' : 'OpenAI · connect API key' }}</option>
-                      <option value="anthropic" :disabled="workspaceKind === 'demo'">{{ workspaceKind === 'demo' ? 'Anthropic · open your workspace' : anthropicReady ? 'Anthropic · 3 perspectives' : 'Anthropic · connect API key' }}</option>
+                      <option value="openai" :disabled="workspaceKind === 'demo'">{{ workspaceKind === 'demo' ? 'OpenAI · open your workspace' : openaiReady ? `OpenAI · ${selectedAgentCount} ${selectedAgentCount >= AGENT_MIN ? 'agents' : 'perspectives'}` : 'OpenAI · connect API key' }}</option>
+                      <option value="anthropic" :disabled="workspaceKind === 'demo'">{{ workspaceKind === 'demo' ? 'Anthropic · open your workspace' : anthropicReady ? `Anthropic · ${selectedAgentCount} ${selectedAgentCount >= AGENT_MIN ? 'agents' : 'perspectives'}` : 'Anthropic · connect API key' }}</option>
                     </select>
                   </label><button
                     v-if="isRunning"
@@ -913,17 +924,11 @@ watch(
             aria-label="Simulation graph"
           >
             <SimulationGraph
-              v-if="!isAIRun(latestRun)"
               :key="activeId"
               :run="latestRun"
+              :graph-data="generatedGraph"
               :session-title="activeSession.title"
             />
-            <div v-else class="ai-graph-note">
-              <AppIcon name="spark" :size="28" />
-              <h2>Read the research perspectives</h2>
-              <p>{{ providerName(latestRun?.mode) }} responses are available in the chat. The illustrative demo graph does not represent these AI runs.</p>
-              <button class="secondary-button" @click="activeView = 'Chat'">View AI responses</button>
-            </div>
             <div v-if="activeView === 'Graph'" class="graph-actions">
               <button class="secondary-button" @click="activeView = 'Chat'">
                 <AppIcon name="chat" :size="16" />Back to chat</button

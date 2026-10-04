@@ -1,6 +1,7 @@
 import { computed, getCurrentScope, onScopeDispose, reactive, shallowRef, unref, watch } from 'vue'
 import { createWorkspaceController, PROMPT_LIMIT, STORAGE_KEY } from '../lib/simulationWorkspace.js'
 import { snapshotSimulationContext } from '../lib/simulationContext.js'
+import { AGENT_BATCH_SIZE, AGENT_CONCURRENCY, agentBatch, reviewSummary, validateAgentReviews } from '../../../shared/reviewAgents.js'
 
 let workspace
 
@@ -17,34 +18,62 @@ export function createOpenAIRunTransport(controller, {
     const run = controller.startRun(sessionId, prompt, { mode: provider })
     if (!run) return null
     const context = snapshotSimulationContext(controller.state.sessions.find(session => session.id === sessionId)?.context)
-    const body = JSON.stringify({ ...(provider === 'anthropic' ? { provider } : {}), prompt: run.prompt, ...(context ? { context } : {}) })
+    const payload = { ...(provider === 'anthropic' ? { provider } : {}), prompt: run.prompt, ...(context ? { context } : {}) }
     const request = { sessionId, abort: new AbortController() }
     requests.set(run.id, request)
     void (async () => {
       try {
-        const response = await fetchImpl('/api/simulate', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          signal: request.abort.signal,
-          body,
-        })
-        let result
-        try { result = await response.json() } catch { /* A proxy error may not contain JSON. */ }
-        if (!response.ok) {
-          const fallback = response.status === 401
-            ? 'Your session has expired. Sign in again, then retry your question.'
-            : response.status === 429
-              ? 'Too many requests are running. Please wait and try again.'
-              : 'The AI service could not complete this request. Please try again.'
-          throw new Error(typeof result?.error === 'string' ? result.error : fallback)
+        async function post(batch) {
+          const response = await fetchImpl('/api/simulate', {
+            method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+            signal: batch ? AbortSignal.any([request.abort.signal, AbortSignal.timeout(115000)]) : request.abort.signal,
+            body: JSON.stringify({ ...payload, ...(batch ? { agentBatch: batch } : {}) }),
+          })
+          let result
+          try { result = await response.json() } catch { /* A proxy error may not contain JSON. */ }
+          request.abort.signal.throwIfAborted()
+          if (!response.ok) {
+            const fallback = response.status === 401
+              ? 'Your session has expired. Sign in again, then retry your question.'
+              : response.status === 429
+                ? 'Too many requests are running. Please wait and try again.'
+                : 'The AI service could not complete this request. Please try again.'
+            throw new Error(typeof result?.error === 'string' ? result.error : fallback)
+          }
+          return result
         }
-        if (typeof result?.content !== 'string' || !result.content.trim()) throw new Error('The server returned an empty response. Please try again.')
-        controller.finishRun(sessionId, run.id, result)
+        if (!run.agentReviews) {
+          const result = await post()
+          if (typeof result?.content !== 'string' || !result.content.trim()) throw new Error('The server returned an empty response. Please try again.')
+          controller.finishRun(sessionId, run.id, result)
+          return
+        }
+        let offset = 0
+        let model = ''
+        async function worker() {
+          while (offset < run.agentCount) {
+            request.abort.signal.throwIfAborted()
+            const batch = { offset, total: run.agentCount }
+            offset += AGENT_BATCH_SIZE
+            const result = await post(batch)
+            if (result?.agentCount !== run.agentCount || result.offset !== batch.offset || result.provider !== provider || typeof result.model !== 'string' || result.model.length > 100 || (model && model !== result.model)) {
+              throw new Error('The server returned reviews for a different agent batch. Completed reviews remain in the graph.')
+            }
+            const reviews = validateAgentReviews(result.reviews, agentBatch(batch), run.sources.map(source => source.id))
+            model = result.model
+            if (!controller.appendAgentReviews(sessionId, run.id, reviews)) return
+          }
+        }
+        await Promise.all(Array.from({ length: AGENT_CONCURRENCY }, worker))
+        request.abort.signal.throwIfAborted()
+        controller.finishRun(sessionId, run.id, { content: reviewSummary(run.agentReviews, run.agentCount), model })
       } catch (error) {
         // stopRun/deleteSession already made the run terminal before aborting.
         // A late server response or rejection cannot replace that state.
-        if (!request.abort.signal.aborted) controller.failRun(sessionId, run.id, error instanceof Error ? error.message : 'The request failed. Please try again.')
+        if (!request.abort.signal.aborted) {
+          controller.failRun(sessionId, run.id, error instanceof Error ? error.message : 'The request failed. Please try again.')
+          request.abort.abort()
+        }
       } finally {
         requests.delete(run.id)
       }

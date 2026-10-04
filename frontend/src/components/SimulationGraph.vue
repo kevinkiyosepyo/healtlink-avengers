@@ -1,4 +1,5 @@
 <script setup>
+import { AGENT_MIN } from "../../../shared/reviewAgents.js";
 import {
   computed,
   nextTick,
@@ -99,6 +100,11 @@ const progress = computed(() =>
   Math.min(100, Math.max(0, Number(props.run?.progress) || 0)),
 );
 const statusLabel = computed(() => {
+  if (props.graphData?.mode === 'generated') {
+    return props.graphData.agentCount >= AGENT_MIN
+      ? `${props.graphData.completedCount} / ${props.graphData.agentCount} reviewed · ${props.run?.status || 'ready'}`
+      : `AI response · ${props.run?.status || 'ready'}`;
+  }
   if (props.graphData) {
     return ({ running: "Scripted review playing", completed: "Replay complete", stopped: "Replay paused", paused: "Replay paused" })[
       props.run?.status
@@ -388,7 +394,22 @@ function toggleMotion() {
     moving.value = false;
   } else reheat(0.6);
 }
+let graphRunId = null;
+function updateGeneratedGraph() {
+  if (props.graphData?.mode !== 'generated' || graphRunId !== props.graphData.runId || !nodes.value.length) return rebuild();
+  const previous = nodeById.value;
+  nodes.value = props.graphData.nodes.map(node => {
+    const existing = previous.get(node.id);
+    if (!existing) return { ...node };
+    const { x, y, vx, vy, ...metadata } = node;
+    Object.assign(existing, metadata);
+    return existing;
+  });
+  links.value = props.graphData.links.map(link => ({ ...link }));
+  reheat(0.12);
+}
 function rebuild() {
+  graphRunId = props.graphData?.runId || null;
   cancelGesture();
   clearSelection(false);
   search.value = "";
@@ -633,7 +654,7 @@ function motionChanged(event) {
 watch(
   () => props.graphData || props.run?.id,
   () => {
-    if (initialized) rebuild();
+    if (initialized) updateGeneratedGraph();
   },
 );
 watch(
@@ -705,11 +726,11 @@ onBeforeUnmount(() => {
     <header class="graph-header">
       <div>
         <h2 :id="`${graphId}-heading`">{{ graphData?.title || 'Research connections' }}</h2>
-        <p v-if="graphData?.description" class="graph-description">{{ graphData.description }}</p>
+        <p v-if="graphData?.description" class="graph-description" :aria-live="graphData.mode === 'generated' ? 'polite' : undefined">{{ graphData.description }}</p>
       </div>
       <div class="graph-header-actions">
         <span class="graph-demo-tag">{{
-          graphData ? "Scripted demo" : run ? "Demo graph" : "Sample graph"
+          graphData?.mode === "generated" ? "AI review graph" : graphData ? "Scripted demo" : run ? "Demo graph" : "Sample graph"
         }}</span
         ><button
           v-if="canFullscreen"
@@ -1096,7 +1117,7 @@ onBeforeUnmount(() => {
       <span
         ><i :class="run?.status"></i>{{ statusLabel
         }}<template v-if="run"> · {{ Math.round(progress) }}%</template></span
-      ><span>{{ graphData ? 'Fictional case · Scripted agent perspectives' : 'Illustrative graph · Connections are sample data' }}</span>
+      ><span>{{ graphData?.mode === 'generated' ? 'AI topics and returned source references · Exploratory reviews' : graphData ? 'Fictional case · Scripted agent perspectives' : 'Illustrative graph · Connections are sample data' }}</span>
     </div>
   </section>
 </template>

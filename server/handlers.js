@@ -9,6 +9,7 @@ import { createPublicInstitutionPreviewHandler, publicInstitutionPreview } from 
 import { CONTEXT_INSTRUCTIONS, institutionInstructions, institutionPerspectives, simulationContext } from "./simulationContext.js";
 import { transcribeAudio } from "./transcription.js";
 import { reviewEvidence } from "./evidence.js";
+import { generateAgentBatch } from "./agentSimulation.js";
 
 const OPENAI_BASE = "https://api.openai.com/v1";
 const ANTHROPIC_BASE = "https://api.anthropic.com/v1";
@@ -294,6 +295,20 @@ export function createApiHandler({ env = process.env, fetchImpl = globalThis.fet
       const input = simulationInput(body);
       const context = await simulationContext(body.context, session, config);
       if (context.message) input.unshift(context.message);
+      if (body.agentBatch !== undefined) {
+        if (body.context?.agentCount !== body.agentBatch?.total) {
+          throw new HttpError(400, "invalid_agent_batch", "The agent count must match the saved simulation setup.");
+        }
+        const signal = AbortSignal.any([request.signal, AbortSignal.timeout(100_000)]);
+        return json(await generateAgentBatch({
+          batch: body.agentBatch, provider,
+          model: provider === "anthropic" ? config.anthropicModel : config.model,
+          input, sourceIds: (body.context?.documents || []).map(document => document.id),
+          requestProvider: async payload => readProviderResponse(await upstream(fetchImpl,
+            provider === "anthropic" ? "/messages" : "/responses", apiKey,
+            { method: "POST", signal, body: JSON.stringify(payload) }, provider, connection.workspaceId), provider),
+        }));
+      }
       const perspectives = context.institution ? institutionPerspectives(context.institution) : PERSPECTIVES;
       const groupAbort = new AbortController();
       const simulationDeadline = AbortSignal.timeout(100_000);
