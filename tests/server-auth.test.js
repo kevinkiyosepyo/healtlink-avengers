@@ -63,6 +63,9 @@ test("Auth.js session validation rejects missing, tampered, expired, or sessionl
   }
   assert.equal(await authenticate(request("/api/account"), config), null);
   assert.equal((await authenticate(await authRequest(), config)).id, session.id);
+  assert.equal((await authenticate(await authRequest({ provider: "google" }), config)).id, session.id);
+  assert.equal((await authenticate(await authRequest({ provider: "google" }), config)).provider, "google");
+  assert.equal(await authenticate(await authRequest({ provider: "removed-provider" }), config), null);
   assert.equal(await authenticate(await authRequest({ sessionExpiresAt: 0 }), config), null);
   assert.equal(await authenticate(await authRequest({ sid: null }), config), null);
   assert.equal(await authenticate(await authRequest({}, -120), config), null);
@@ -73,10 +76,23 @@ test("Google auth configuration verifies email and generates a new session id fo
   const auth = authConfig(config);
   assert.equal(auth.callbacks.signIn({ account: { provider: "google" }, profile: { email_verified: true } }), true);
   assert.equal(auth.callbacks.signIn({ account: { provider: "google" }, profile: { email_verified: false } }), false);
+  assert.equal(auth.callbacks.signIn({ account: { provider: "removed-provider" }, profile: { email_verified: true } }), false);
+  assert.equal(auth.callbacks.jwt({ token: { provider: "removed-provider", sid: session.sid, sessionExpiresAt: session.expiresAt } }), null);
   const first = auth.callbacks.jwt({ token: {}, account: { provider: "google" } });
   const second = auth.callbacks.jwt({ token: {}, account: { provider: "google" } });
   assert.notEqual(first.sid, second.sid);
   assert.equal(auth.callbacks.redirect({ url: "https://attacker.example" }), `${config.origin}/#/login`);
+});
+
+test("removed OAuth providers cannot start sign-in or exchange callback codes", async () => {
+  const api = createApiHandler({ env });
+  for (const path of ["/api/auth/signin/chatgpt", "/api/auth/callback/chatgpt?code=unused"]) {
+    const response = await api(request(path));
+    assert.equal(response.status, 404);
+    assert.equal((await response.json()).code, "not_found");
+  }
+  const response = await api(request("/api/auth/providers"));
+  assert.deepEqual(Object.keys(await response.json()), ["google"]);
 });
 
 test("authenticated boundaries reject anonymous requests and missing OpenAI connections", async () => {

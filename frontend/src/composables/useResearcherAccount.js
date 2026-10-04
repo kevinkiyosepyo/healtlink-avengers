@@ -51,7 +51,7 @@ export function useResearcherAccount() {
     return request(`/api/auth/${name}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Auth-Return-Redirect': '1' },
-      body: new URLSearchParams({ csrfToken, callbackUrl: `${window.location.origin}/#/login` }),
+      body: new URLSearchParams({ csrfToken, callbackUrl: `${window.location.origin}${window.location.pathname}#/login` }),
     })
   }
 

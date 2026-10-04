@@ -1,9 +1,9 @@
 import { hkdfSync, randomUUID } from "node:crypto";
-import { EncryptJWT, jwtDecrypt } from "jose";
-import { chatgptSettings } from "./chatgpt.js";
+import { EncryptJWT, jwtDecrypt, SignJWT, jwtVerify } from "jose";
 
 export const SESSION_SECONDS = 8 * 60 * 60;
 export const BODY_LIMIT = 16 * 1024;
+export const SIMULATION_BODY_LIMIT = 640 * 1024;
 export const API_KEY_PATTERN = /^sk-[A-Za-z0-9_-]{20,500}$/;
 
 export class HttpError extends Error {
@@ -23,15 +23,12 @@ export function settings(env = process.env) {
     if (url.protocol !== "https:" && !(url.protocol === "http:" && local)) return null;
     origin = url.origin;
   } catch { return null; }
-  const chatgpt = chatgptSettings(env);
-  const google = Boolean(env.AUTH_GOOGLE_ID && env.AUTH_GOOGLE_SECRET);
-  if (typeof env.AUTH_SECRET !== "string" || env.AUTH_SECRET.length < 32 || (!google && !chatgpt)) return null;
+  if (typeof env.AUTH_SECRET !== "string" || env.AUTH_SECRET.length < 32 || !env.AUTH_GOOGLE_ID || !env.AUTH_GOOGLE_SECRET) return null;
   return {
     origin,
     secret: env.AUTH_SECRET,
     googleId: env.AUTH_GOOGLE_ID,
     googleSecret: env.AUTH_GOOGLE_SECRET,
-    chatgpt,
     secure: origin.startsWith("https:"),
     model: /^[a-zA-Z0-9._:-]{1,100}$/.test(env.OPENAI_MODEL || "") ? env.OPENAI_MODEL : "gpt-4.1-mini",
   };
@@ -130,4 +127,37 @@ export async function readApiKey(request, session, config, now = Date.now()) {
 
 export function keyCookie(value, config, maxAge = SESSION_SECONDS) {
   return `${keyCookieName(config)}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.max(0, Math.floor(maxAge))}${config.secure ? "; Secure" : ""}`;
+}
+
+function institutionSigningKey(config) {
+  return new Uint8Array(hkdfSync("sha256", config.secret, config.origin, "microfish.institution-snapshot.v1", 32));
+}
+
+// Public research is readable in the browser; its signature prevents a client
+// from replacing a verified member or policy with a fabricated institutional fact.
+export async function sealInstitutionProfile(profile, session, config, now = Date.now()) {
+  const issued = Math.floor(now / 1000);
+  return new SignJWT({ profile, sid: session.sid, version: 1 })
+    .setProtectedHeader({ alg: "HS256", typ: "JWT" })
+    .setSubject(session.id)
+    .setIssuer(config.origin)
+    .setAudience("microfish.institution")
+    .setIssuedAt(issued)
+    .setExpirationTime(Math.min(issued + SESSION_SECONDS, session.expiresAt))
+    .sign(institutionSigningKey(config));
+}
+
+export async function readInstitutionProfile(token, session, config, now = Date.now()) {
+  if (typeof token !== "string" || token.length > 80_000 || !session || session.expiresAt <= now / 1000) return null;
+  try {
+    const { payload } = await jwtVerify(token, institutionSigningKey(config), {
+      issuer: config.origin,
+      audience: "microfish.institution",
+      subject: session.id,
+      currentDate: new Date(now),
+      algorithms: ["HS256"],
+    });
+    if (payload.sid !== session.sid || payload.version !== 1 || !payload.profile?.university || !Array.isArray(payload.profile.reviewers)) return null;
+    return payload.profile;
+  } catch { return null; }
 }

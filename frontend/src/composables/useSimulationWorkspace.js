@@ -1,11 +1,12 @@
-import { computed, reactive, toRef, watch } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, reactive, shallowRef, unref, watch } from 'vue'
 import { createWorkspaceController, PROMPT_LIMIT, STORAGE_KEY } from '../lib/simulationWorkspace.js'
+import { snapshotSimulationContext } from '../lib/simulationContext.js'
 
 let workspace
-let timer
 
 // The request belongs to the original run even when another chat is selected.
-// Only the current prompt is sent: browser-local chats are not account scoped.
+// The current prompt and this session's setup are captured before the request.
+// Conversation history stays in this browser; switching chats cannot redirect it.
 export function createOpenAIRunTransport(controller, {
   fetchImpl = (...args) => globalThis.fetch(...args),
   deleteRecords = async (sessionId, runIds) => (await import('../lib/recordStorage.js')).recordStorage.deleteSession(sessionId, runIds),
@@ -15,6 +16,8 @@ export function createOpenAIRunTransport(controller, {
   function startOpenAIRun(sessionId, prompt) {
     const run = controller.startRun(sessionId, prompt, { mode: 'openai' })
     if (!run) return null
+    const context = snapshotSimulationContext(controller.state.sessions.find(session => session.id === sessionId)?.context)
+    const body = JSON.stringify({ prompt: run.prompt, ...(context ? { context } : {}) })
     const request = { sessionId, abort: new AbortController() }
     requests.set(run.id, request)
     void (async () => {
@@ -24,7 +27,7 @@ export function createOpenAIRunTransport(controller, {
           credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
           signal: request.abort.signal,
-          body: JSON.stringify({ prompt: run.prompt }),
+          body,
         })
         let result
         try { result = await response.json() } catch { /* A proxy error may not contain JSON. */ }
@@ -82,66 +85,97 @@ export function createOpenAIRunTransport(controller, {
   return { startOpenAIRun, stopRun, deleteSession, dispose }
 }
 
-export function useSimulationWorkspace() {
-  if (workspace) return workspace
-  let storage
-  try { storage = window.localStorage } catch { /* The controller exposes the storage warning. */ }
-  const controller = createWorkspaceController({ storage, stateFactory: reactive })
-  const transport = createOpenAIRunTransport(controller)
-  const { state } = controller
+export function createScopedSimulationWorkspace({ storage, storageKey = STORAGE_KEY, fetchImpl, windowTarget = globalThis.window, documentTarget = globalThis.document } = {}) {
+  const readKey = () => unref(storageKey) || STORAGE_KEY
+  let currentKey = readKey()
+  const current = shallowRef(createWorkspaceController({ storage, storageKey: currentKey, stateFactory: reactive }))
+  let transport = createOpenAIRunTransport(current.value, { fetchImpl })
+  let disposed = false
+
+  function finishScope() {
+    transport.dispose()
+    // A run should never continue in an account that is no longer active.
+    for (const session of current.value.state.sessions) current.value.stopRun(session.id)
+    current.value.persist()
+  }
+
+  const stopScopeWatch = watch(readKey, key => {
+    if (key === currentKey) return
+    finishScope()
+    currentKey = key
+    current.value = createWorkspaceController({ storage, storageKey: key, stateFactory: reactive })
+    transport = createOpenAIRunTransport(current.value, { fetchImpl })
+  }, { flush: 'sync' })
 
   // The controller belongs to the workspace, not the currently selected chat.
   // Switching chats therefore never removes or restarts a simulation timer.
-  timer = window.setInterval(controller.tick, 250)
+  const timer = windowTarget?.setInterval(() => current.value.tick(), 250)
   const saveDrafts = watch(
-    () => state.sessions.map(session => [session.id, session.draft]),
+    () => current.value.state.sessions.map(session => [session.id, session.draft]),
     () => {
-      for (const session of state.sessions) {
+      for (const session of current.value.state.sessions) {
         if (typeof session.draft !== 'string') session.draft = ''
         else if (session.draft.length > PROMPT_LIMIT) session.draft = session.draft.slice(0, PROMPT_LIMIT)
       }
-      controller.persist()
+      current.value.persist()
     },
     { flush: 'sync' },
   )
   const resume = () => {
-    if (!document.hidden) {
-      controller.refreshStorageStatus()
-      controller.tick()
+    if (!documentTarget?.hidden) {
+      current.value.refreshStorageStatus()
+      current.value.tick()
     }
   }
-  const persist = () => controller.persist()
+  const persist = () => current.value.persist()
   const storageChanged = event => {
-    if ((event.key === STORAGE_KEY || event.key === null) && (!event.storageArea || event.storageArea === storage)) controller.refreshStorageStatus()
+    if ((event.key === currentKey || event.key === null) && (!event.storageArea || event.storageArea === storage)) current.value.refreshStorageStatus()
   }
-  document.addEventListener('visibilitychange', resume)
-  window.addEventListener('pagehide', persist)
-  window.addEventListener('storage', storageChanged)
+  documentTarget?.addEventListener('visibilitychange', resume)
+  windowTarget?.addEventListener('pagehide', persist)
+  windowTarget?.addEventListener('storage', storageChanged)
 
-  workspace = {
-    sessions: toRef(state, 'sessions'),
-    activeId: toRef(state, 'activeId'),
-    storageWarning: toRef(state, 'storageWarning'),
-    activeSession: computed(() => state.sessions.find(session => session.id === state.activeId)),
-    runningCount: computed(() => state.sessions.filter(session => session.runs.some(run => run.status === 'running')).length),
-    createSession: controller.createSession,
-    selectSession: controller.selectSession,
-    renameSession: controller.renameSession,
-    deleteSession: transport.deleteSession,
-    startRun: controller.startRun,
-    startOpenAIRun: transport.startOpenAIRun,
-    stopRun: transport.stopRun,
+  function dispose() {
+    if (disposed) return
+    disposed = true
+    stopScopeWatch()
+    finishScope()
+    saveDrafts()
+    if (timer !== undefined) windowTarget?.clearInterval(timer)
+    documentTarget?.removeEventListener('visibilitychange', resume)
+    windowTarget?.removeEventListener('pagehide', persist)
+    windowTarget?.removeEventListener('storage', storageChanged)
   }
-  if (import.meta.hot) {
-    import.meta.hot.dispose(() => {
-      window.clearInterval(timer)
-      transport.dispose()
-      saveDrafts()
-      document.removeEventListener('visibilitychange', resume)
-      window.removeEventListener('pagehide', persist)
-      window.removeEventListener('storage', storageChanged)
-      workspace = undefined
-    })
+
+  return {
+    sessions: computed(() => current.value.state.sessions),
+    activeId: computed(() => current.value.state.activeId),
+    storageWarning: computed(() => current.value.state.storageWarning),
+    activeSession: computed(() => current.value.state.sessions.find(session => session.id === current.value.state.activeId)),
+    runningCount: computed(() => current.value.state.sessions.filter(session => session.runs.some(run => run.status === 'running')).length),
+    createSession: (...args) => current.value.createSession(...args),
+    selectSession: (...args) => current.value.selectSession(...args),
+    renameSession: (...args) => current.value.renameSession(...args),
+    setSessionContext: (...args) => current.value.setSessionContext(...args),
+    deleteSession: (...args) => transport.deleteSession(...args),
+    startRun: (...args) => current.value.startRun(...args),
+    startOpenAIRun: (...args) => transport.startOpenAIRun(...args),
+    stopRun: (...args) => transport.stopRun(...args),
+    dispose,
   }
-  return workspace
+}
+
+export function useSimulationWorkspace({ storageKey = STORAGE_KEY } = {}) {
+  if (workspace) return workspace
+  let storage
+  try { storage = window.localStorage } catch { /* The controller exposes the storage warning. */ }
+  const instance = createScopedSimulationWorkspace({ storage, storageKey })
+  workspace = instance
+  const dispose = () => {
+    instance.dispose()
+    if (workspace === instance) workspace = undefined
+  }
+  if (getCurrentScope()) onScopeDispose(dispose)
+  if (import.meta.hot) import.meta.hot.dispose(dispose)
+  return instance
 }

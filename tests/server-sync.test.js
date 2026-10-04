@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createMemoryStore, createSyncHandler, userKey } from "../server/sync.js";
+import { createApiHandler } from "../server/handlers.js";
+import { nodeHandler } from "../server/node.js";
+import { SYNC_BODY_LIMIT } from "../server/sync.js";
 import { createRecord } from "../frontend/src/lib/records.js";
 
 const config = { origin: "https://microfish.test", secret: "test-secret-value-long-enough" };
@@ -71,4 +74,46 @@ test("storage keys are a salted hash, never the raw account id", () => {
   assert.match(key, /^[0-9a-f]{64}$/);
   assert.ok(!key.includes(alice.id));
   assert.notEqual(key, userKey(bob, config.secret));
+});
+
+
+test("shared API exposes configured cloud backup and preserves Google account partitions", async () => {
+  const env = { AUTH_URL: config.origin, AUTH_SECRET: "test-secret-value-with-more-than-thirty-two-characters", AUTH_GOOGLE_ID: "client", AUTH_GOOGLE_SECRET: "secret" };
+  const session = { ...alice, sid: "login", expiresAt: Math.floor(Date.now() / 1000) + 3600 };
+  const store = createMemoryStore();
+  const api = createApiHandler({ env, authenticate: async () => session, syncStore: store });
+  const account = await (await api(request("/api/account"))).json();
+  assert.equal(account.cloudSync, true);
+  assert.equal(account.user.provider, "google");
+  const data = { version: 1, sessions: [{ id: "saved-chat" }] };
+  const response = await api(request("/api/sync/workspace", { method: "PUT", body: { data } }));
+  assert.equal(response.status, 200);
+  const saved = await store.list(userKey(alice, env.AUTH_SECRET));
+  assert.deepEqual(saved[0].data, data);
+  assert.deepEqual((await (await api(request("/api/sync"))).json()).items[0].data, data);
+  const disabled = createApiHandler({ env, authenticate: async () => session, syncStore: null });
+  assert.equal((await disabled(request("/api/sync"))).status, 503);
+});
+
+test("Node transport allows cloud snapshots above the generic limit and enforces the sync limit", async () => {
+  async function send(size, streamed) {
+    let accepted = false;
+    const handler = nodeHandler(async incoming => { accepted = true; return Response.json({ size: (await incoming.arrayBuffer()).byteLength }); });
+    const body = Buffer.alloc(size);
+    const req = { url: "/api/sync/workspace?test=1", method: "PUT", headers: { host: "microfish.test", "content-type": "application/json" }, socket: {}, once() {} };
+    if (streamed) req[Symbol.asyncIterator] = async function * () { yield body; };
+    else req.body = body;
+    let response;
+    const res = { statusCode: 200, once() {}, setHeader() {}, end(bytes) { response = new Response(bytes, { status: this.statusCode }); } };
+    await handler(req, res);
+    return { response, accepted };
+  }
+  for (const streamed of [false, true]) {
+    const allowed = await send(64 * 1024, streamed);
+    assert.equal(allowed.response.status, 200);
+    assert.equal(allowed.accepted, true);
+    const denied = await send(SYNC_BODY_LIMIT + 1, streamed);
+    assert.equal(denied.response.status, 413);
+    assert.equal(denied.accepted, false);
+  }
 });

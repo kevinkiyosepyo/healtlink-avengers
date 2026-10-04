@@ -1,6 +1,12 @@
-import { BODY_LIMIT, HttpError, json } from "./security.js";
+import { BODY_LIMIT, HttpError, SIMULATION_BODY_LIMIT, json } from "./security.js";
+import { AUDIO_BODY_LIMIT } from "./transcription.js";
+import { SYNC_BODY_LIMIT } from "./sync.js";
 
 async function toWebRequest(req, signal) {
+  const pathname = (req.url || '/').split('?')[0].replace(/\/$/, '')
+  const bodyLimit = pathname === '/api/simulate' ? SIMULATION_BODY_LIMIT
+    : pathname === '/api/transcribe' ? AUDIO_BODY_LIMIT
+      : pathname === '/api/sync' || pathname.startsWith('/api/sync/') ? SYNC_BODY_LIMIT : BODY_LIMIT
   const headers = new Headers();
   for (const [name, value] of Object.entries(req.headers || {})) {
     if (Array.isArray(value)) value.forEach((entry) => headers.append(name, entry));
@@ -8,7 +14,7 @@ async function toWebRequest(req, signal) {
   }
   let body;
   if (!["GET", "HEAD"].includes(req.method || "GET")) {
-    if (Number(headers.get("content-length")) > BODY_LIMIT) throw new HttpError(413, "request_too_large", "The request is too large.");
+    if (Number(headers.get("content-length")) > bodyLimit) throw new HttpError(413, "request_too_large", "The request is too large.");
     if (req.body !== undefined) {
       if (Buffer.isBuffer(req.body) || typeof req.body === "string") body = req.body;
       else if (headers.get("content-type")?.startsWith("application/x-www-form-urlencoded")) body = new URLSearchParams(req.body).toString();
@@ -18,12 +24,12 @@ async function toWebRequest(req, signal) {
       let size = 0;
       for await (const chunk of req) {
         size += Buffer.byteLength(chunk);
-        if (size > BODY_LIMIT) throw new HttpError(413, "request_too_large", "The request is too large.");
+        if (size > bodyLimit) throw new HttpError(413, "request_too_large", "The request is too large.");
         chunks.push(Buffer.from(chunk));
       }
       body = Buffer.concat(chunks);
     }
-    if (Buffer.byteLength(body) > BODY_LIMIT) throw new HttpError(413, "request_too_large", "The request is too large.");
+    if (Buffer.byteLength(body) > bodyLimit) throw new HttpError(413, "request_too_large", "The request is too large.");
   }
   const protocol = req.socket?.encrypted ? "https" : "http";
   const url = new URL(req.url || "/", `${protocol}://${headers.get("host") || "localhost"}`);

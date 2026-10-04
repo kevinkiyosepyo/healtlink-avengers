@@ -11,6 +11,8 @@ const STORAGE_LIMIT = 2_000_000
 const MAX_MESSAGE_LENGTH = AI_RESPONSE_LIMIT
 const CONFLICT_WARNING = 'Chats changed in another tab. Saving is paused here to protect those changes. Copy any new text you want to keep, then reload this tab.'
 const SAVE_WARNING = 'Changes could not be saved in this browser. Free browser storage or remove older chats before reloading.'
+const CONTEXT_RECOVERY_WARNING = 'Some saved simulation setup could not be recovered. Your chats are still available; open their setup to re-add the missing context.'
+const CONTEXT_WARNING_PREFIX = 'Simulation setup: '
 const identity = value => value
 const boundedText = (value, limit) => typeof value === 'string' ? value.slice(0, limit) : ''
 const timestamp = (value, fallback) => Number.isFinite(value) && value >= 0 ? value : fallback
@@ -51,7 +53,7 @@ function assistantContent(run) {
 }
 
 function blankSession(now, id) {
-  return { id: id(), title: UNTITLED, createdAt: now, updatedAt: now, draft: '', messages: [], runs: [] }
+  return { id: id(), title: UNTITLED, createdAt: now, updatedAt: now, draft: '', messages: [], runs: [], context: null }
 }
 
 function normalizeRun(raw, now) {
@@ -103,10 +105,15 @@ function normalizeSession(raw, now) {
   }
   const latestRun = runs.at(-1)
   const interruptedRun = latestRun?.interrupted ? latestRun : null
+  const contextResult = validateSimulationContext(raw.context)
+  const contextWarning = !contextResult.valid || raw.contextWarning === CONTEXT_RECOVERY_WARNING
+    ? CONTEXT_RECOVERY_WARNING : ''
   return {
     id: raw.id, title: boundedText(raw.title, TITLE_LIMIT).trim() || UNTITLED,
     createdAt: timestamp(raw.createdAt, now), updatedAt: timestamp(raw.updatedAt, now),
     draft: boundedText(raw.draft, PROMPT_LIMIT) || interruptedRun?.prompt || '', messages, runs,
+    context: contextResult.valid ? snapshotSimulationContext(contextResult.context) : null,
+    ...(contextWarning ? { contextWarning } : {}),
   }
 }
 
@@ -117,14 +124,14 @@ function normalizeSession(raw, now) {
  * stateFactory lets Vue make this state reactive without coupling the controller
  * (and its deterministic tests) to the UI framework.
  */
-export function createWorkspaceController({ storage, now = Date.now, id = uniqueId, stateFactory = identity, durationMs = DEMO_DURATION_MS } = {}) {
+export function createWorkspaceController({ storage, storageKey = STORAGE_KEY, now = Date.now, id = uniqueId, stateFactory = identity, durationMs = DEMO_DURATION_MS } = {}) {
   let loaded = null
   let expectedSnapshot = null
   let storageReadable = false
   let storageConflict = false
   let storageWarning = storage ? '' : 'Browser storage is unavailable. Chats will last only for this visit.'
   try {
-    const saved = storage?.getItem(STORAGE_KEY)
+    const saved = storage?.getItem(storageKey)
     storageReadable = Boolean(storage)
     expectedSnapshot = saved ?? null
     if (saved) {
@@ -140,6 +147,7 @@ export function createWorkspaceController({ storage, now = Date.now, id = unique
       if (!sessions.length) throw new Error('Saved workspace contains no valid chats')
       loaded = { sessions, activeId: sessions.some(session => session.id === parsed.activeId) ? parsed.activeId : sessions[0].id }
       if (sessions.length !== parsed.sessions.length) storageWarning = 'Some saved chats could not be recovered. Your valid chats are still available.'
+      if (sessions.some(session => session.contextWarning)) storageWarning = [storageWarning, CONTEXT_RECOVERY_WARNING].filter(Boolean).join(' ')
     }
   } catch {
     storageWarning = storageReadable
@@ -161,7 +169,7 @@ export function createWorkspaceController({ storage, now = Date.now, id = unique
     if (!storage || !storageReadable) return false
     // Recheck on every write as storage events may arrive after a draft change
     // or pagehide. Once stale, this tab must reload before writing again.
-    if (storage.getItem(STORAGE_KEY) !== expectedSnapshot) {
+    if (storage.getItem(storageKey) !== expectedSnapshot) {
       storageConflict = true
       state.storageWarning = CONFLICT_WARNING
       return true
@@ -180,7 +188,7 @@ export function createWorkspaceController({ storage, now = Date.now, id = unique
       if (checkForExternalChanges()) return false
       const serialized = JSON.stringify({ version: 1, sessions: state.sessions, activeId: state.activeId })
       if (serialized.length > STORAGE_LIMIT) throw new Error('Storage limit reached')
-      storage.setItem(STORAGE_KEY, serialized)
+      storage.setItem(storageKey, serialized)
       expectedSnapshot = serialized
       // Keep recovery/capacity notices visible; clear only a previous save failure.
       if (state.storageWarning.startsWith('Changes could not be saved')) state.storageWarning = ''
@@ -191,14 +199,22 @@ export function createWorkspaceController({ storage, now = Date.now, id = unique
     }
   }
 
-  function createSession() {
+  function createSession({ title, context } = {}) {
+    const result = validateSimulationContext(context)
+    if (!result.valid) {
+      state.storageWarning = storageConflict ? CONFLICT_WARNING : CONTEXT_WARNING_PREFIX + result.error
+      return null
+    }
     if (state.sessions.length >= SESSION_LIMIT) {
       state.storageWarning = storageConflict ? CONFLICT_WARNING : `This browser can keep up to ${SESSION_LIMIT} chats. Delete an older chat to create another.`
       return null
     }
     const session = blankSession(now(), id)
+    session.title = boundedText(title, TITLE_LIMIT).trim() || UNTITLED
+    session.context = snapshotSimulationContext(result.context)
     state.sessions.unshift(session)
     state.activeId = session.id
+    if (state.storageWarning.startsWith(CONTEXT_WARNING_PREFIX)) state.storageWarning = ''
     persist()
     return getSession(session.id)
   }
@@ -216,6 +232,29 @@ export function createWorkspaceController({ storage, now = Date.now, id = unique
     if (!session || !cleaned) return false
     session.title = cleaned
     session.updatedAt = now()
+    persist()
+    return true
+  }
+
+  function setSessionContext(sessionId, context) {
+    const session = getSession(sessionId)
+    if (!session) return false
+    if (session.runs.some(run => run.status === 'running')) {
+      state.storageWarning = storageConflict ? CONFLICT_WARNING : `${CONTEXT_WARNING_PREFIX}Stop the current run before changing its setup.`
+      return false
+    }
+    const result = validateSimulationContext(context)
+    if (!result.valid) {
+      state.storageWarning = storageConflict ? CONFLICT_WARNING : CONTEXT_WARNING_PREFIX + result.error
+      return false
+    }
+    session.context = snapshotSimulationContext(result.context)
+    delete session.contextWarning
+    session.updatedAt = now()
+    if (state.storageWarning.startsWith(CONTEXT_WARNING_PREFIX)
+      || (state.storageWarning === CONTEXT_RECOVERY_WARNING && !state.sessions.some(entry => entry.contextWarning))) {
+      state.storageWarning = ''
+    }
     persist()
     return true
   }
@@ -261,6 +300,11 @@ export function createWorkspaceController({ storage, now = Date.now, id = unique
     const session = getSession(sessionId)
     const cleaned = boundedText(prompt, PROMPT_LIMIT).trim()
     if (!session || !cleaned || session.runs.some(run => run.status === 'running')) return null
+    const contextResult = validateSimulationContext(session.context)
+    if (!contextResult.valid) {
+      state.storageWarning = storageConflict ? CONFLICT_WARNING : CONTEXT_WARNING_PREFIX + contextResult.error
+      return null
+    }
     if (session.runs.length >= RUN_LIMIT) {
       state.storageWarning = storageConflict ? CONFLICT_WARNING : `This chat has reached its ${RUN_LIMIT}-run limit. Create a new chat to continue.`
       return null
@@ -345,5 +389,6 @@ export function createWorkspaceController({ storage, now = Date.now, id = unique
   tick()
   // Give fresh browser tabs the same blank chat ID before the first keystroke.
   if (storageReadable && expectedSnapshot === null) persist()
-  return { state, createSession, selectSession, renameSession, deleteSession, startRun, finishRun, failRun, stopRun, setDraft, tick, persist, refreshStorageStatus }
+  return { state, createSession, selectSession, renameSession, setSessionContext, deleteSession, startRun, finishRun, failRun, stopRun, setDraft, tick, persist, refreshStorageStatus }
 }
+import { snapshotSimulationContext, validateSimulationContext } from './simulationContext.js'

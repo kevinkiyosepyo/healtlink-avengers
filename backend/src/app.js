@@ -20,19 +20,19 @@ export function createApp({ serveStatic = existsSync(DIST), env = process.env } 
       "X-Frame-Options": "DENY",
       // Microphone only for this origin: voice dictation.
       "Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
-      // Only this origin, the OpenAI API, and the embedding model CDN.
+      // Allow only the research APIs, model CDN, and Google sign-in used by these workspaces.
       "Content-Security-Policy": [
         "default-src 'self'",
         // blob: is needed because the self-hosted ONNX runtime imports its glue via a same-origin blob URL.
         "script-src 'self' 'wasm-unsafe-eval' blob:",
         "worker-src 'self' blob:",
         "style-src 'self' 'unsafe-inline'",
-        "img-src 'self' data: blob:",
+        "img-src 'self' data: blob: https://*.googleusercontent.com",
         "font-src 'self' data:",
-        "connect-src 'self' https://api.openai.com https://huggingface.co https://*.huggingface.co https://*.hf.co",
+        "connect-src 'self' https://api.openai.com https://huggingface.co https://*.huggingface.co https://*.hf.co https://api.openalex.org https://www.ebi.ac.uk https://clinicaltrials.gov",
         "frame-ancestors 'none'",
         "base-uri 'self'",
-        "form-action 'none'",
+        "form-action 'self' https://accounts.google.com",
       ].join("; "),
     });
     next();
@@ -40,7 +40,7 @@ export function createApp({ serveStatic = existsSync(DIST), env = process.env } 
 
   app.get("/api/health", (req, res) => res.json({ ok: true }));
   app.use((req, res, next) => {
-    if (["/api/account", "/api/openai", "/api/simulate", "/api/sync"].includes(req.path) || req.path.startsWith("/api/sync/")
+    if (["/api/account", "/api/openai", "/api/simulate", "/api/institution", "/api/transcribe", "/api/sync"].includes(req.path) || req.path.startsWith("/api/sync/")
       || req.path === "/api/auth" || req.path.startsWith("/api/auth/")) {
       return accountApi(req, res);
     }

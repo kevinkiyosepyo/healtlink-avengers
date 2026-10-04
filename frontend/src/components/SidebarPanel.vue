@@ -70,6 +70,9 @@ const isMac =
 
     <div class="section-label mono"><span>tools</span></div>
     <nav class="tool-nav" aria-label="Research tools">
+      <a class="sidebar-row-button workspace-return-link" href="/#/case">
+        <FlaskConical :size="15" /> 60-agent sample case
+      </a>
       <button class="sidebar-row-button" :class="{ current: currentPage === 'library' }" :aria-current="currentPage === 'library' ? 'page' : undefined" @click="emit('navigate', 'library')">
         <Library :size="15" /> source library
       </button>

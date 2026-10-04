@@ -6,3 +6,4 @@ Recurring corrections in this repo. Read before running the skill; add one line 
 - 2026-10-03 · stance color function written twice (graph and analysis panel) → `stanceColor()` in `lib/agents.js`.
 - 2026-10-03 · localStorage read/write try/catch repeated per component → `lib/storage.js`.
 - 2026-10-03 · async components each needing an error state → one `lazy()` helper in `App.vue`.
+- 2026-10-03 · divergent workspace entrypoints shared incompatible graph/style files → keep their page components and styles separate, share compatible state/API helpers, and verify both routes.

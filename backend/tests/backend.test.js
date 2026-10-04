@@ -19,11 +19,15 @@ test('health responds and unknown API routes 404', async () => {
   })
 })
 
-test('security headers restrict connections to self, OpenAI and the model CDN', async () => {
+test('security headers permit the configured research APIs and Google sign-in only', async () => {
   await withServer({ serveStatic: false }, async (base) => {
     const response = await fetch(`${base}/api/health`)
     const csp = response.headers.get('content-security-policy')
     assert.match(csp, /connect-src 'self' https:\/\/api\.openai\.com/)
+    const connect = csp.split('; ').find(part => part.startsWith('connect-src ')).split(' ').slice(1)
+    assert.deepEqual(connect, ["'self'", 'https://api.openai.com', 'https://huggingface.co', 'https://*.huggingface.co', 'https://*.hf.co', 'https://api.openalex.org', 'https://www.ebi.ac.uk', 'https://clinicaltrials.gov'])
+    assert.match(csp, /form-action 'self' https:\/\/accounts\.google\.com(?:;|$)/)
+    assert.match(csp, /img-src 'self' data: blob: https:\/\/\*\.googleusercontent\.com/)
     assert.match(csp, /frame-ancestors 'none'/)
     assert.equal(response.headers.get('x-frame-options'), 'DENY')
     assert.equal(response.headers.get('x-powered-by'), null)
@@ -48,5 +52,16 @@ test('serves the SPA when a build exists', async () => {
     if (response.status === 404) return // no frontend build in this checkout
     assert.equal(response.status, 200)
     assert.match(await response.text(), /<div id="app">/)
+  })
+})
+
+
+test('Express routes institution lookup and transcription through the shared API', async () => {
+  await withServer({ serveStatic: false, env: {} }, async (base) => {
+    for (const path of ['/api/institution', '/api/transcribe']) {
+      const response = await fetch(`${base}${path}`, { method: 'POST' })
+      assert.equal(response.status, 503)
+      assert.equal((await response.json()).code, 'auth_not_configured')
+    }
   })
 })
