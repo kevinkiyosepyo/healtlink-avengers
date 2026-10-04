@@ -45,13 +45,14 @@ const FlickeringGrid = lazy(() => import("./components/ui/flickering-grid/Flicke
 const SettingsDialog = lazy(() => import("./components/SettingsDialog.vue"));
 const settingsMounted = ref(false);
 const JumpScare = lazy(() => import("./components/fx/JumpScare.vue"), Nothing);
+const LibraryPage = lazy(() => import("./components/LibraryPage.vue"));
 const StudyBuildPage = lazy(() => import("./components/StudyBuildPage.vue"));
 const PreflightPage = lazy(() => import("./components/PreflightPage.vue"));
 const TimelinePage = lazy(() => import("./components/TimelinePage.vue"));
 
 // Hash routes for the research tools; chats stay on the default page.
-const PAGES = { "#/build": "build", "#/preflight": "preflight", "#/timeline": "timeline" };
-const PAGE_TITLES = { build: "study build", preflight: "document preflight", timeline: "start-up timeline" };
+const PAGES = { "#/library": "library", "#/build": "build", "#/preflight": "preflight", "#/timeline": "timeline" };
+const PAGE_TITLES = { library: "source library", build: "study build", preflight: "document preflight", timeline: "start-up timeline" };
 const currentPage = ref(PAGES[window.location.hash] ?? "simulations");
 const toolPage = ref(null);
 function navigate(page) {
@@ -540,7 +541,8 @@ watch(
       </div>
 
       <div v-if="currentPage !== 'simulations'" class="tool-shell">
-        <StudyBuildPage v-if="currentPage === 'build'" ref="toolPage" @rehearse="rehearsePrompt" />
+        <LibraryPage v-if="currentPage === 'library'" ref="toolPage" />
+        <StudyBuildPage v-else-if="currentPage === 'build'" ref="toolPage" @rehearse="rehearsePrompt" />
         <PreflightPage v-else-if="currentPage === 'preflight'" ref="toolPage" />
         <TimelinePage v-else ref="toolPage" />
       </div>
@@ -781,6 +783,9 @@ watch(
             <CommandGroup v-if="!paletteTerm.trim()" heading="actions">
               <CommandItem value="new simulation" class="mono" @select="newChat">
                 new simulation
+              </CommandItem>
+              <CommandItem value="source library" class="mono" @select="navigate('library')">
+                source library
               </CommandItem>
               <CommandItem value="study build" class="mono" @select="navigate('build')">
                 study build

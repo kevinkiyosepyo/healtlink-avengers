@@ -7,6 +7,7 @@ import { readJson, writeJson } from "../lib/storage.js";
 import { STORAGE_KEY as WORKSPACE_KEY } from "../lib/simulationWorkspace.js";
 import { recordStorage } from "../lib/recordStorage.js";
 import { runDeliberation } from "../lib/evidence/deliberation.js";
+import { useLibrary } from "./useLibrary.js";
 
 const SETTINGS_KEY = "microfish:settings";
 const KEY_SESSION_KEY = "microfish:openai-key"; // sessionStorage only: cleared when the tab closes
@@ -256,6 +257,7 @@ export function useResearch(sessions) {
         prompt: record.prompt,
         seed: settings.seed,
         useWeb: settings.web,
+        searchLibrary: useLibrary().searchSources,
         onEvent: (event) => (progress[runId] = event),
       });
       // Output moderation over every generated sentence; flagged text is removed, numbers kept.
@@ -299,8 +301,9 @@ export function useResearch(sessions) {
   async function deleteAllData() {
     await recordStorage.clear().catch(() => {});
     safely(() => indexedDB.deleteDatabase("microfish-embeddings"));
+    safely(() => indexedDB.deleteDatabase("microfish-library"));
     // Every key microfish writes; keep in sync when adding persisted state.
-    for (const key of [WORKSPACE_KEY, SETTINGS_KEY, "microfish:preflight", "microfish:timeline", "microfish:study-build"]) {
+    for (const key of [WORKSPACE_KEY, SETTINGS_KEY, "microfish:preflight", "microfish:timeline", "microfish:study-build", "microfish:library", "microfish:cloud-backup"]) {
       safely(() => window.localStorage.removeItem(key));
     }
     safely(() => window.sessionStorage.clear());

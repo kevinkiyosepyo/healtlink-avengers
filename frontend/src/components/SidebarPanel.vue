@@ -1,5 +1,5 @@
 <script setup>
-import { CalendarRange, Ellipsis, FileCheck2, FlaskConical, Pencil, Plus, Search, SlidersHorizontal, Trash2, X } from "@lucide/vue";
+import { CalendarRange, Ellipsis, FileCheck2, FlaskConical, Library, Pencil, Plus, Search, SlidersHorizontal, Trash2, X } from "@lucide/vue";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -68,6 +68,9 @@ const isMac =
 
     <div class="section-label mono"><span>tools</span></div>
     <nav class="tool-nav" aria-label="Research tools">
+      <button class="sidebar-row-button" :class="{ current: currentPage === 'library' }" :aria-current="currentPage === 'library' ? 'page' : undefined" @click="emit('navigate', 'library')">
+        <Library :size="15" /> source library
+      </button>
       <button class="sidebar-row-button" :class="{ current: currentPage === 'build' }" :aria-current="currentPage === 'build' ? 'page' : undefined" @click="emit('navigate', 'build')">
         <FlaskConical :size="15" /> study build
       </button>

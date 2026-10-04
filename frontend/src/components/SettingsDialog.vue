@@ -156,6 +156,7 @@ function onKeyInput() {
         <p class="label mono">where your data goes</p>
         <ul>
           <li>chats, records and settings are stored in this browser (indexeddb / localstorage). only if you turn on <b>cloud backup</b> are they also copied to microfish's cloud storage (aws dynamodb, encrypted at rest, keyed to a salted hash of your account).</li>
+          <li>your source library (documents you add) stays in this browser. during an evidence deliberation, only the few passages that match are sent to openai as part of the evidence.</li>
           <li v-if="research.settings.mode === 'openai' && research.settings.evidence">evidence deliberation sends short search queries (derived from your scenario by the model, not the full text) to openalex, europe pmc and clinicaltrials.gov.</li>
           <li v-if="research.settings.mode === 'openai'">your key and scenario go <b>directly from this browser to api.openai.com</b> — never through a microfish server. openai's api data policies apply.</li>
           <li>your key is never written to disk; "remember" keeps it only until this tab closes.</li>

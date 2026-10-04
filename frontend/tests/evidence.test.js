@@ -130,10 +130,14 @@ test('runDeliberation runs plan → retrieval → web → debate → consensus w
     if (name === 'rebuttal') return chat({ responses: [{ to: 'trialist', stance: 'partly', point: 'small sample', sources: ['S2'] }], revised_position: 'r', revised_estimate: { value: 4, low: 1, high: 7 }, changed_mind: true, confidence: 0.6 })
     return chat({ decision: 'proceed with a hybrid schedule', recommendation: 'proceed_with_changes', estimate: { value: 4, low: 1, high: 7 }, calculation: 'mean', key_points: [{ text: 'k', sources: ['S1'] }], dissent: [], evidence_gaps: ['no rare-disease data'], confidence: 0.7 })
   }
-  const result = await runDeliberation({ apiKey: 'k', model: 'm', prompt: 'remote visits', fetchImpl, onEvent: (e) => stages.push(e.stage), now: () => 0 })
+  const librarySource = { id: 'library:d:0', kind: 'document', database: 'Your library', title: 'Site notes — passage 1', abstract: 'Our sites lose 20% by week 8.', studyTypes: ['team document'], credibility: { score: 70, tier: 'yours', reasons: [] }, location: { docId: 'd', chunk: 0, line: 1, page: null } }
+  const searchLibrary = async (queries) => (queries.includes('remote visits') ? [librarySource] : [])
+  const result = await runDeliberation({ apiKey: 'k', model: 'm', prompt: 'remote visits', fetchImpl, searchLibrary, onEvent: (e) => stages.push(e.stage), now: () => 0 })
   assert.equal(result.retrieval.irrelevantDropped, 0)
-  assert.deepEqual(stages, ['planning', 'retrieving', 'web', 'opening', 'rebuttal', 'consensus', 'done'])
-  assert.deepEqual(result.pack.map((s) => [s.sid, s.kind]), [['S1', 'paper'], ['S2', 'trial'], ['S3', 'web']])
+  assert.deepEqual(stages, ['planning', 'retrieving', 'library', 'web', 'opening', 'rebuttal', 'consensus', 'done'])
+  assert.deepEqual(result.pack.map((s) => [s.sid, s.kind]), [['S1', 'paper'], ['S2', 'trial'], ['S3', 'document'], ['S4', 'web']])
+  assert.equal(result.pack[2].location.docId, 'd', 'library passages keep their location')
+  assert.deepEqual(result.library, { used: 1, error: null, enabled: true })
   assert.equal(result.web.excluded.length, 1, 'low-credibility web result is excluded but kept for audit')
   assert.equal(result.openings.length, PANEL.length)
   assert.deepEqual(result.openings[0].claims[0].sources, ['S1'])
