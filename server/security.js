@@ -54,12 +54,12 @@ export function requireSameOrigin(request, config) {
   }
 }
 
-export async function readJson(request) {
+export async function readJson(request, limit = BODY_LIMIT) {
   if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
     throw new HttpError(415, "invalid_content_type", "Send a JSON request.");
   }
   const length = Number(request.headers.get("content-length"));
-  if (length > BODY_LIMIT) throw new HttpError(413, "request_too_large", "The request is too large.");
+  if (length > limit) throw new HttpError(413, "request_too_large", "The request is too large.");
   let size = 0;
   const chunks = [];
   if (request.body) {
@@ -68,7 +68,7 @@ export async function readJson(request) {
       const { value, done } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > BODY_LIMIT) {
+      if (size > limit) {
         await reader.cancel();
         throw new HttpError(413, "request_too_large", "The request is too large.");
       }
