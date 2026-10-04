@@ -75,7 +75,7 @@ test("fresh Google sessions connect and run either provider through the producti
     assert.match(result.content, /Review prerequisites/);
     assert.equal(calls.length, 4); // One connection check, then three perspectives.
     assert.equal(calls[0][provider === "anthropic" ? "max_tokens" : "max_output_tokens"], 16);
-    assert.equal(calls[1][provider === "anthropic" ? "max_tokens" : "max_output_tokens"], 700);
+    assert.equal(calls[1][provider === "anthropic" ? "max_tokens" : "max_output_tokens"], 2000);
     const otherUser = `${await googleCookie({ ...user, id: "another-google-user" })}; ${connected.headers.get("set-cookie").split(";")[0]}`;
     const unauthorized = await throughNode(api, request("/api/simulate", { method: "POST", cookie: otherUser, body: { provider, prompt: "A fictional study" } }));
     assert.equal(unauthorized.status, 403);

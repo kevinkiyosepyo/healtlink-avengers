@@ -6,7 +6,7 @@
   "outputDirectory": "frontend/dist",
   "functions": {
     "api/simulate.js": {
-      "maxDuration": 60
+      "maxDuration": 120
     },
     "api/institution.js": {
       "maxDuration": 180,
