@@ -3,10 +3,12 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import SimulationGraph from './SimulationGraph.vue'
 import SampleCaseStudy from './SampleCaseStudy.vue'
 import AppIcon from './AppIcon.vue'
-import { CASE_REVIEW_GROUPS, createSampleCaseGraph, SAMPLE_REVIEW_EVENTS, SAMPLE_AGENT_COUNT, SAMPLE_ROLE_COUNT, SAMPLE_REVIEW_LENSES } from '../lib/sampleCaseGraph.js'
+import { CASE_REVIEW_GROUPS, createSampleCaseGraph, SAMPLE_REVIEW_EVENTS, SAMPLE_AGENT_COUNT, SAMPLE_INITIAL_REVIEWED, SAMPLE_ROLE_COUNT, SAMPLE_REVIEW_LENSES } from '../lib/sampleCaseGraph.js'
+import { getSampleCaseComparison } from '../lib/sampleCaseStudy.js'
 
 const emit = defineEmits(['navigate'])
 const graph = createSampleCaseGraph()
+const comparison = getSampleCaseComparison()
 const byId = new Map(graph.nodes.map(node => [node.id, node]))
 const groups = new Map(CASE_REVIEW_GROUPS.map(group => [group.id, group]))
 const irbMembers = graph.nodes.filter(node => node.kind === 'agent' && node.lensId === 'case-review' && node.baseRole.startsWith('IRB '))
@@ -18,7 +20,7 @@ const activityHeading = ref(null)
 const brief = ref(null)
 const view = ref('graph')
 const selectedId = ref(null)
-const reviewed = ref(6)
+const reviewed = ref(SAMPLE_INITIAL_REVIEWED)
 const playing = ref(true)
 const speed = ref(1)
 const reduceMotion = ref(false)
@@ -97,7 +99,7 @@ defineExpose({ focusHeading: () => view.value === 'brief' ? brief.value?.focusHe
           <p>Simulated IRB board members, research teams, and participant perspectives review Alex’s research onboarding.</p>
           <p class="case-review-roster">{{ SAMPLE_ROLE_COUNT }} fictional roles × {{ SAMPLE_REVIEW_LENSES.length }} review lenses · {{ CASE_REVIEW_GROUPS.length }} groups</p>
         </div>
-        <div class="case-graph-heading-actions"><span class="case-agent-count"><AppIcon name="people" :size="17" /><strong>{{ SAMPLE_AGENT_COUNT }}</strong> scripted review agents</span><div class="case-heading-buttons"><button type="button" @click="inspectIrb">Meet the IRB members<AppIcon name="people" :size="16" /></button><button type="button" @click="showBrief">Read the case brief<AppIcon name="arrow-right" :size="16" /></button></div></div>
+        <div class="case-graph-heading-actions"><span class="case-agent-count"><AppIcon name="people" :size="17" /><strong>{{ SAMPLE_AGENT_COUNT }}</strong> scripted review agents</span><div class="case-heading-buttons"><button type="button" @click="inspectIrb">Meet the IRB members<AppIcon name="people" :size="16" /></button><button type="button" @click="showBrief">Read sample report<AppIcon name="arrow-right" :size="16" /></button></div></div>
       </header>
 
       <div class="case-review-controls" aria-label="Sample review playback">
@@ -116,6 +118,14 @@ defineExpose({ focusHeading: () => view.value === 'brief' ? brief.value?.focusHe
           <SimulationGraph ref="graphView" :graph-data="graph" :run="run" :active-node-ids="activeIds" :selected-node-id="selectedId" :show-details="false" @node-select="inspect" />
         </div>
         <aside ref="reviewRail" class="case-review-rail" aria-label="Case agent reviews">
+          <section class="case-review-complete" aria-labelledby="case-conclusions-heading">
+            <h2 id="case-conclusions-heading">Final conclusions</h2>
+            <span class="case-scripted-label">Prepared sample report</span>
+            <p><strong>{{ comparison.calendarDaysRecovered }} calendar days earlier.</strong> The prepared path reaches readiness on October 19 instead of November 2.</p>
+            <p>Verify HS-02 evidence before submission and prepare the empty workspace during review. The five-day complete-packet review and data-release checks stay in place.</p>
+            <p v-if="complete">All {{ SAMPLE_AGENT_COUNT }} perspectives reviewed.</p>
+            <button type="button" @click="showBrief">Read sample report <span aria-hidden="true">→</span></button>
+          </section>
           <template v-if="selected">
             <header class="case-rail-header"><h2>{{ selected.kind === 'agent' ? 'Agent perspective' : 'Case connection' }}</h2><button type="button" aria-label="Back to review activity" @click="clearSelection">×</button></header>
             <div class="case-node-detail">
@@ -144,7 +154,6 @@ defineExpose({ focusHeading: () => view.value === 'brief' ? brief.value?.focusHe
                 </button>
               </li>
             </ol>
-            <div v-if="complete" class="case-review-complete"><strong>All {{ SAMPLE_AGENT_COUNT }} perspectives reviewed</strong><p>The case’s prepared path reaches readiness on October 19 instead of November 2, with the same five-day complete-packet review.</p><button type="button" @click="emit('navigate', 'timeline')">Explore the timeline <span aria-hidden="true">→</span></button></div>
           </template>
         </aside>
       </div>
@@ -228,7 +237,8 @@ h1:focus { outline: none; }
 .case-node-properties div { margin-bottom: 10px; }
 .case-node-properties dt { font-weight: 600; }
 .case-node-properties dd { margin: 2px 0 0; color: var(--ui-muted); overflow-wrap: anywhere; }
-.case-review-complete { margin: 0 19px 20px; font-size: .8125rem; line-height: 1.7; }
+.case-review-complete { margin: 0 19px; padding: 20px 0; border-bottom: 1px solid var(--ui-border); font-size: .8125rem; line-height: 1.7; }
+.case-review-complete h2 { margin: 0 0 10px; font-size: .9375rem; font-weight: 600; }
 .case-review-complete p { color: var(--ui-muted); }
 .case-graph-note { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; padding: 11px 24px; border-top: 1px solid var(--ui-border); color: var(--ui-muted); font-size: .6875rem; }
 .case-graph-note button { background: none; border: 0; padding: 4px 0; min-height: 28px; font-size: .6875rem; color: var(--ui-accent); }

@@ -1,35 +1,41 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { CASE_REVIEW_GROUPS, createSampleCaseGraph, SAMPLE_AGENT_COUNT, SAMPLE_ROLE_COUNT, SAMPLE_REVIEW_EVENTS, SAMPLE_REVIEW_LENSES } from '../src/lib/sampleCaseGraph.js'
+import { CASE_REVIEW_GROUPS, createSampleCaseGraph, SAMPLE_AGENT_COUNT, SAMPLE_INITIAL_REVIEWED, SAMPLE_ROLE_COUNT, SAMPLE_REVIEW_EVENTS, SAMPLE_REVIEW_LENSES } from '../src/lib/sampleCaseGraph.js'
 import { getSampleCaseComparison, SAMPLE_CASE_START, SAMPLE_CASE_ROTATION_END } from '../src/lib/sampleCaseStudy.js'
 import { settleLayout } from '../src/lib/simulationGraph.js'
 
-test('the fictional review has 300 distinct perspectives from 60 roles in six equal groups', () => {
+test('the fictional review has 150 distinct perspectives from 30 roles in six equal groups', () => {
   const { nodes, types, description } = createSampleCaseGraph()
   const agents = nodes.filter(node => node.kind === 'agent')
-  assert.equal(nodes.length, 309)
-  assert.equal(agents.length, 300)
+  assert.equal(nodes.length, 159)
+  assert.equal(agents.length, 150)
   assert.equal(SAMPLE_AGENT_COUNT, agents.length)
-  assert.equal(SAMPLE_ROLE_COUNT, 60)
-  assert.equal(new Set(agents.map(node => node.baseRole)).size, 60)
-  assert.equal(new Set(agents.map(node => node.role)).size, 300)
+  assert.equal(SAMPLE_ROLE_COUNT, 30)
+  assert.equal(new Set(agents.map(node => node.baseRole)).size, 30)
+  assert.equal(new Set(agents.map(node => node.role)).size, 150)
   assert.equal(new Set(nodes.map(node => node.id)).size, nodes.length)
   assert.deepEqual(CASE_REVIEW_GROUPS.map(group => group.id), ['research', 'ethics', 'training', 'operations', 'data', 'participants'])
   for (const group of CASE_REVIEW_GROUPS) {
-    assert.equal(agents.filter(node => node.groupId === group.id && node.type === group.id).length, 50)
+    assert.equal(agents.filter(node => node.groupId === group.id && node.type === group.id).length, 25)
     assert.ok(types.some(type => type.id === group.id && type.color === group.color))
   }
   assert.match(description, /scripted sample replay/)
-  assert.match(description, /60 roles × 5 review lenses/)
+  assert.match(description, /30 roles × 5 review lenses/)
   assert.match(description, /simulated IRB-member perspectives, not a board decision/)
   assert.ok(nodes.every(node => node.properties.Source.includes('Fictional')))
   assert.ok(agents.every(node => node.description === node.reviewText && node.focusIds.length === 2))
 })
 
+test('the opening sample leaves ten reviews for playback', () => {
+  assert.equal(SAMPLE_INITIAL_REVIEWED, 140)
+  assert.equal(SAMPLE_REVIEW_EVENTS.slice(SAMPLE_INITIAL_REVIEWED).length, 10)
+  assert.ok(SAMPLE_INITIAL_REVIEWED < SAMPLE_AGENT_COUNT)
+})
+
 test('every base role retains its original identity and covers five distinct review lenses', () => {
   const agents = createSampleCaseGraph().nodes.filter(node => node.kind === 'agent')
   const baseIds = new Set(agents.map(node => node.baseAgentId))
-  assert.equal(baseIds.size, 60)
+  assert.equal(baseIds.size, 30)
   assert.equal(SAMPLE_REVIEW_LENSES.length, 5)
   for (const baseId of baseIds) {
     const perspectives = agents.filter(node => node.baseAgentId === baseId)
@@ -63,10 +69,10 @@ test('the oversight group explicitly includes fictional IRB scientific, nonscien
 test('every agent has one distinct replay event with valid case references', () => {
   const { nodes } = createSampleCaseGraph()
   const byId = new Map(nodes.map(node => [node.id, node]))
-  assert.equal(SAMPLE_REVIEW_EVENTS.length, 300)
-  assert.equal(new Set(SAMPLE_REVIEW_EVENTS.map(event => event.id)).size, 300)
-  assert.equal(new Set(SAMPLE_REVIEW_EVENTS.map(event => event.agentId)).size, 300)
-  assert.equal(new Set(SAMPLE_REVIEW_EVENTS.map(event => event.text)).size, 300)
+  assert.equal(SAMPLE_REVIEW_EVENTS.length, 150)
+  assert.equal(new Set(SAMPLE_REVIEW_EVENTS.map(event => event.id)).size, 150)
+  assert.equal(new Set(SAMPLE_REVIEW_EVENTS.map(event => event.agentId)).size, 150)
+  assert.equal(new Set(SAMPLE_REVIEW_EVENTS.map(event => event.text)).size, 150)
   SAMPLE_REVIEW_EVENTS.forEach((event, index) => {
     const agent = byId.get(event.agentId)
     assert.equal(agent?.kind, 'agent')

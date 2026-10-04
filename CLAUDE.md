@@ -11,7 +11,7 @@ Vue + Vite in `frontend/`, shared authenticated API handlers in `server/`, Expre
 
 Lookahead supports research preparation and simulation: study context, document/voice intake, university-informed fictional reviewer perspectives, multiple simulation chats, an interactive graph, document preflight, and a bottleneck timeline. Research tools add sources, explicit cited evidence reviews, and history exports inside the same workspace.
 
-The sample opens a scripted knowledge graph with 300 fictional agent perspectives, formed from 60 roles and five review lenses. Include explicit IRB roles, and distinguish these scripted perspectives from real people or model calls. Never require sign-in or university onboarding for the demo. University selection belongs only to the personal research entry.
+The sample opens a scripted knowledge graph with 150 fictional agent perspectives, formed from 30 roles and five review lenses. Open playback at 140/150 reviewed, with the prepared sample report and final conclusions available independently of playback. Include explicit IRB roles, and distinguish these scripted perspectives from real people or model calls. Never require sign-in or university onboarding for the demo. University selection belongs only to the personal research entry.
 
 There is one layout and simulation controller. Light mode keeps the white/blue appearance; dark mode uses the warm charcoal/coral palette. Theme changes must not navigate, reload, remount, switch storage, or reset drafts, graph selections, modal inputs, or active runs.
 

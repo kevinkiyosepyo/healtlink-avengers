@@ -39,6 +39,13 @@ defineExpose({ focusHeading: () => heading.value?.focus() });
         <p>The {{ SAMPLE_AGENT_COUNT }} scripted agents represent {{ SAMPLE_ROLE_COUNT }} fictional roles × {{ SAMPLE_REVIEW_LENSES.length }} review lenses: {{ SAMPLE_REVIEW_LENSES.map(lens => lens.label.toLowerCase()).join(', ') }}. They explore this invented case; they do not vote or issue an institutional approval.</p>
       </section>
 
+      <section class="case-changes" aria-labelledby="case-conclusions-heading">
+        <h2 id="case-conclusions-heading">Final conclusions</h2>
+        <p>The prepared sequence reaches readiness {{ comparison.calendarDaysRecovered }} calendar days earlier: {{ dateLabel(comparison.prepared.readyDate) }} instead of {{ dateLabel(comparison.original.readyDate) }}. That recovers {{ comparison.workingDaysRecovered }} working days for Alex’s assigned research task.</p>
+        <p>Resolve the HS-02 evidence gap before submitting, then prepare the empty workspace while the complete packet is under review. The five-day review, local release checks, and authorized data-access conditions remain required.</p>
+        <p>This prepared report is available throughout the scripted walkthrough. Its dates and time savings follow the fictional case assumptions.</p>
+      </section>
+
       <section class="case-comparison" aria-labelledby="case-comparison-heading">
         <div class="case-section-heading">
           <h2 id="case-comparison-heading">Same start. Same review. A different path.</h2>
