@@ -181,7 +181,7 @@ test("Anthropic simulations use three bounded Messages calls with current contex
     assert.equal(init.headers.Authorization, undefined);
     assert.equal(init.headers["Content-Type"], "application/json");
     assert.equal(payload.model, config.anthropicModel);
-    assert.equal(payload.max_tokens, 700);
+    assert.equal(payload.max_tokens, 2000);
     assert.equal(payload.store, undefined);
     assert.equal(payload.max_output_tokens, undefined);
     assert.equal(payload.input, undefined);
@@ -264,7 +264,7 @@ test("omitted or explicit OpenAI provider preserves the Responses API contract w
     const payload = JSON.parse(init.body);
     assert.equal(payload.store, false);
     assert.equal(payload.model, config.model);
-    assert.equal(payload.max_output_tokens, 700);
+    assert.equal(payload.max_output_tokens, 2000);
     return Response.json({ status: "completed", output: [{ type: "message", role: "assistant", content: [{ type: "output_text", text: "Check prerequisites." }] }] });
   } });
   for (const provider of [undefined, "openai"]) {
@@ -290,7 +290,7 @@ test("Anthropic simulation input bounds and invalid context never make billed ca
 
 test("Anthropic incomplete, refused, malformed, empty, and failed runs return safe recoverable errors", async () => {
   const cookie = await connectedCookie();
-  for (const [data, code] of [[message({ stop_reason: "max_tokens" }), "anthropic_incomplete"], [message({ stop_reason: "refusal" }), "anthropic_incomplete"], [message({ stop_reason: "tool_use" }), "anthropic_incomplete"], [message({ stop_reason: null }), "anthropic_incomplete"], [message({ content: [] }), "anthropic_empty"], [message({ content: [{ type: "thinking", thinking: "private" }] }), "anthropic_empty"], ["Sensitive unreadable provider response", "anthropic_invalid_response"]]) {
+  for (const [data, code] of [[message({ stop_reason: "max_tokens" }), "anthropic_output_limit"], [message({ stop_reason: "refusal" }), "anthropic_incomplete"], [message({ stop_reason: "tool_use" }), "anthropic_incomplete"], [message({ stop_reason: null }), "anthropic_incomplete"], [message({ content: [] }), "anthropic_empty"], [message({ content: [{ type: "thinking", thinking: "private" }] }), "anthropic_empty"], ["Sensitive unreadable provider response", "anthropic_invalid_response"]]) {
     const api = handler({ fetchImpl: async () => typeof data === "string" ? new Response(data) : Response.json(data) });
     const response = await api(request("/api/simulate", { method: "POST", cookie, body: { provider: "anthropic", prompt: "A fictional scenario" } }));
     assert.equal(response.status, 502);

@@ -189,7 +189,7 @@ test("simulations make three bounded real Responses calls and sanitize their out
     assert.equal(url, "https://api.openai.com/v1/responses");
     assert.equal(payload.store, false);
     assert.equal(payload.model, "gpt-4.1-mini");
-    assert.equal(payload.max_output_tokens, 700);
+    assert.equal(payload.max_output_tokens, 2000);
     assert.equal(payload.input.length, 2);
     assert.ok(payload.instructions.includes("fictional"));
     assert.ok(!JSON.stringify(payload).includes(apiKey));

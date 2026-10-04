@@ -149,7 +149,7 @@ test('mocked HTTP flow: ordinary Gmail login, encrypted OpenAI connection, and s
   assert.equal(harness.calls.length, 4);
   for (const call of harness.calls.slice(1)) {
     assert.equal(call.apiKey, OPENAI_ALICE);
-    assert.equal(call.payload.max_output_tokens, 700);
+    assert.equal(call.payload.max_output_tokens, 2000);
     assert.deepEqual(call.payload.input.at(-1), { role: 'user', content: prompt });
   }
   for (const name of ['Research coordinator', 'Participant', 'Study operations']) assert.ok(result.data.content.includes(name));
@@ -199,7 +199,7 @@ test('mocked HTTP flow: two Gmail researchers and both providers preserve identi
     assert.equal(call.provider, 'anthropic');
     assert.equal(call.apiKey, ANTHROPIC_BOB);
     assert.equal(call.headers.get('anthropic-workspace-id'), WORKSPACE_ID);
-    assert.equal(call.payload.max_tokens, 700);
+    assert.equal(call.payload.max_tokens, 2000);
   }
   assert.equal((await bob.request('/api/openai', { method: 'POST', body: { apiKey: OPENAI_BOB } })).status, 200);
   const bobRun = await bob.request('/api/simulate', { method: 'POST', body: { prompt: 'Bob’s fictional scenario.' } });

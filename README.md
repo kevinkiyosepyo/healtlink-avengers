@@ -1,6 +1,10 @@
 # Lookahead
 
-DEMO LINK: https://health-link-hackathon.vercel.app/
+[![Bloub-guided Lookahead demo](docs/media/lookahead-demo.gif)](docs/media/lookahead-demo.mp4?raw=true)
+
+[Live demo](https://health-link-hackathon.vercel.app/) · [Download MP4](docs/media/lookahead-demo.mp4?raw=true)
+
+Bloub-guided tour of the fictional sample: graph exploration, source checks, and a changing timeline.
 
 Lookahead helps researchers prepare a study, inspect its dependencies, and explore possible reviewer questions. The login page leads with **Predict the Future**; the outputs are planning scenarios, not validated forecasts or institutional decisions.
 
