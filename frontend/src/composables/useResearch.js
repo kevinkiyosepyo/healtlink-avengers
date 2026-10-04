@@ -6,6 +6,7 @@ import { downloadText, stamp } from "../lib/download.js";
 import { readJson, writeJson } from "../lib/storage.js";
 import { STORAGE_KEY as WORKSPACE_KEY } from "../lib/simulationWorkspace.js";
 import { recordStorage } from "../lib/recordStorage.js";
+import { runDeliberation } from "../lib/evidence/deliberation.js";
 
 const SETTINGS_KEY = "microfish:settings";
 const KEY_SESSION_KEY = "microfish:openai-key"; // sessionStorage only: cleared when the tab closes
@@ -41,6 +42,9 @@ export function useResearch(sessions) {
     temperature: typeof saved.temperature === "number" ? saved.temperature : 0,
     seed: Number.isInteger(saved.seed) ? saved.seed : 7,
     rememberKey: Boolean(saved.rememberKey),
+    // Evidence deliberation after each analysis; web search is the secondary source.
+    evidence: saved.evidence !== false,
+    web: saved.web !== false,
   });
   const apiKey = ref(settings.rememberKey ? safely(() => window.sessionStorage.getItem(KEY_SESSION_KEY)) || "" : "");
   const keyStatus = ref(apiKey.value ? "unchecked" : "none"); // none | unchecked | checking | valid | invalid
@@ -86,9 +90,12 @@ export function useResearch(sessions) {
   function indexRecord(record) {
     if (record.analysisKey && record.analysis && !record.error) byAnalysisKey.set(record.analysisKey, record.runId);
   }
-  function forgetRecord(runId) {
+  function unindexRecord(runId) {
     const key = records[runId]?.analysisKey;
     if (key && byAnalysisKey.get(key) === runId) byAnalysisKey.delete(key);
+  }
+  function forgetRecord(runId) {
+    unindexRecord(runId);
     delete records[runId];
     delete status[runId];
   }
@@ -107,7 +114,8 @@ export function useResearch(sessions) {
       await recordStorage.deleteRun(record.runId).catch(() => {});
       return null;
     }
-    if (records[record.runId]) forgetRecord(record.runId);
+    // Replacing a record (e.g. adding its deliberation) keeps the run's status.
+    unindexRecord(record.runId);
     records[record.runId] = record;
     indexRecord(record);
     return record;
@@ -221,14 +229,52 @@ export function useResearch(sessions) {
           analysis: result.analysis,
           provenance: { ...result.provenance, cached, cachedFrom: hit ? hit.runId : null },
           analysisKey: key,
+          deliberation: hit?.deliberation ?? null,
         }),
-      );
+      ).then((record) => {
+        // Not awaited: the analysis is usable now; the debate fills in later.
+        if (record && inScope && settings.evidence && !record.deliberation) void deliberate(run.id);
+        return record;
+      });
     } catch (error) {
       status[run.id] = "error";
       if (error.code === "auth") keyStatus.value = "invalid";
       return saveRecord(await createRecord({ ...base, mode: "openai", provenance: { provider: "openai", requestedModel: settings.model }, error: error.code ?? "unavailable" }));
     }
   }
+  // ---------- evidence deliberation ----------
+  const progress = reactive({}); // runId -> { stage, detail }
+  async function deliberate(runId) {
+    const record = records[runId];
+    if (!record || record.mode !== "openai" || record.analysis?.inScope !== true || progress[runId]) return;
+    progress[runId] = { stage: "planning", detail: "starting" };
+    let deliberation;
+    try {
+      deliberation = await runDeliberation({
+        apiKey: apiKey.value.trim(),
+        model: settings.model,
+        prompt: record.prompt,
+        seed: settings.seed,
+        useWeb: settings.web,
+        onEvent: (event) => (progress[runId] = event),
+      });
+      // Output moderation over every generated sentence; flagged text is removed, numbers kept.
+      const texts = [deliberation.consensus.decision, deliberation.consensus.calculation, ...deliberation.consensus.key_points.map((p) => p.text),
+        ...deliberation.openings.flatMap((o) => [o.position, o.calculation, ...o.claims.map((c) => c.text)]),
+        ...deliberation.rebuttals.flatMap((r) => [r.revised_position, ...r.responses.map((x) => x.point)])];
+      if ((await moderate(apiKey.value.trim(), texts.join("\n"))).length) deliberation = { ...deliberation, redacted: true, openings: [], rebuttals: [], consensus: { ...deliberation.consensus, decision: "", calculation: "", key_points: [] } };
+    } catch (error) {
+      if (error.code === "auth") keyStatus.value = "invalid";
+      deliberation = { error: error.code ?? "unavailable" };
+    } finally {
+      delete progress[runId];
+    }
+    const current = records[runId];
+    if (!current) return;
+    const { fingerprint, schemaVersion, disclaimer, ...fields } = current;
+    return saveRecord(await createRecord({ ...fields, deliberation }));
+  }
+
   // Re-run always bypasses the cache so researchers can sample a fresh answer.
   async function retry(run, session) {
     const record = records[run.id];
@@ -263,7 +309,7 @@ export function useResearch(sessions) {
 
   instance = {
     settings, apiKey, keyStatus, keyError, models, persistent, ready, modeLabel,
-    records, status, testKey, forgetKey, check, analyze, retry,
+    records, status, progress, testKey, forgetKey, check, analyze, retry, deliberate,
     exportRun, exportAll, deleteAllData,
     recordCount: computed(() => Object.keys(records).length),
   };

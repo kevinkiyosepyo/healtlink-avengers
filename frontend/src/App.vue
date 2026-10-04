@@ -25,9 +25,11 @@ import { prefersReducedMotion, useLenis } from "./composables/useMotion.js";
 import { useSemanticSearch } from "./composables/useSemanticSearch.js";
 import { ERROR_COPY, useResearch } from "./composables/useResearch.js";
 import AnalysisPanel from "./components/AnalysisPanel.vue";
+import EvidencePanel from "./components/EvidencePanel.vue";
 import { BLOCK_REASONS } from "./lib/guardrails.js";
 import { useSimulationWorkspace } from "./composables/useSimulationWorkspace.js";
 import { useResearcherAccount } from "./composables/useResearcherAccount.js";
+import { useCloudSync } from "./composables/useCloudSync.js";
 import { PROMPT_LIMIT, TITLE_LIMIT } from "./lib/simulationWorkspace.js";
 
 // Views load on demand; if a chunk can't be fetched (e.g. a stale tab after a
@@ -215,6 +217,7 @@ const canSubmit = computed(
 );
 const research = useResearch(sessions);
 const account = useResearcherAccount();
+const cloud = useCloudSync({ research, account, sessions });
 const settingsOpen = ref(false);
 watch(settingsOpen, (open) => {
   if (open) settingsMounted.value = true;
@@ -677,6 +680,13 @@ watch(
                     @export="research.exportRun(runForMessage(message).id, $event)"
                     @graph="activeView = 'split'"
                   />
+                  <EvidencePanel
+                    v-if="research.records[message.runId]?.mode === 'openai' && research.records[message.runId]?.analysis?.inScope"
+                    :deliberation="research.records[message.runId].deliberation"
+                    :progress="research.progress[message.runId] ?? null"
+                    :can-run="research.ready.value"
+                    @deliberate="research.deliberate(message.runId)"
+                  />
                 </article>
               </TransitionGroup>
             </div>
@@ -759,7 +769,7 @@ watch(
       </main>
     </div>
 
-    <SettingsDialog v-if="settingsMounted" v-model:open="settingsOpen" :research="research" :account="account" />
+    <SettingsDialog v-if="settingsMounted" v-model:open="settingsOpen" :research="research" :account="account" :cloud="cloud" />
 
     <Dialog v-model:open="paletteOpen">
       <DialogContent class="overlay-surface overflow-hidden p-0" :show-close-button="false">
