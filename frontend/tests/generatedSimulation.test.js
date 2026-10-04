@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { ref } from 'vue'
-import { agentBatch, reviewAgents, validateAgentReviews } from '../../shared/reviewAgents.js'
+import { agentBatch, reviewAgents, reviewSummary, validateAgentReviews } from '../../shared/reviewAgents.js'
 import { normalizeSimulationContext } from '../src/lib/simulationContext.js'
 import { createWorkspaceController } from '../src/lib/simulationWorkspace.js'
 import { createOpenAIRunTransport, createScopedSimulationWorkspace } from '../src/composables/useSimulationWorkspace.js'
@@ -9,7 +9,7 @@ import { createGeneratedSimulationGraph } from '../src/lib/generatedSimulationGr
 import { settleLayout } from '../src/lib/simulationGraph.js'
 
 const context = count => ({ agentCount: count, overview: 'A fictional sleep study.', documents: [{ id: 'protocol', name: 'Protocol.md', kind: 'markdown', text: 'Consent is required.' }] })
-const reviews = batch => agentBatch(batch).map(agent => ({ agentId: agent.id, summary: 'Check the consent process described in Protocol.md.', questions: ['How will comprehension be checked?'], topics: ['consent'], sourceIds: ['protocol'] }))
+const reviews = batch => agentBatch(batch).map(agent => ({ agentId: agent.id, summary: 'Protocol.md requires consent but does not document a comprehension check, leaving understanding unverified.', nextSteps: ['Document a comprehension check before recruitment.'], questions: ['Who will document comprehension?'], topics: ['consent'], sourceIds: ['protocol'] }))
 const result = (batch, provider = 'openai') => ({ reviews: reviews(batch), offset: batch.offset, agentCount: batch.total, provider, model: 'mock-model' })
 const drain = () => new Promise(resolve => setImmediate(resolve))
 function fixture() {
@@ -41,6 +41,56 @@ test('review validation rejects invented source IDs, duplicate agents, missing a
     assert.throws(() => validateAgentReviews(broken, agents, ['protocol']))
   }
   assert.equal(validateAgentReviews([{ ...good[0], sourceIds: [] }, ...good.slice(1)], agents, ['protocol'])[0].sourceIds.length, 0)
+})
+
+test('chat summaries lead with actual insights and cited next steps, deduplicate repetition and retain different conclusions', () => {
+  const good = reviews({ total: 50, offset: 0 })
+  good[1] = { ...good[1], summary: 'The access request includes identifiable data while the role description limits access to fabricated data.', nextSteps: ['Revise the access request to match the authorized role.'], topics: ['privacy'], sourceIds: ['access-request', 'role-description'], questions: [] }
+  const sources = [...context(50).documents, { id: 'access-request', name: 'Access-request.md' }, { id: 'role-description', name: 'Role-description.md' }]
+  const answer = reviewSummary(good, 50, sources)
+  assert(answer.indexOf('Key insights') < answer.indexOf(good[0].summary))
+  assert(answer.indexOf(good[0].summary) < answer.indexOf('Remaining uncertainties'))
+  assert(answer.includes(good[1].summary))
+  assert(answer.includes('Sources: Access-request.md, Role-description.md'))
+  assert(answer.includes('Recommended next steps'))
+  assert(answer.includes(good[1].nextSteps[0]))
+  assert.equal(answer.split(good[0].summary).length - 1, 1)
+  assert.equal(answer.split(good[0].nextSteps[0]).length - 1, 1)
+  assert(!answer.includes('Questions to explore'))
+  assert.equal(reviewSummary([...good].reverse(), 50, sources), answer)
+  good.forEach(review => { review.questions = [] })
+  assert(!reviewSummary(good, 50, sources).includes('Remaining uncertainties'))
+})
+
+test('saved reviews without next steps remain readable and completed chats recover their original model insights', () => {
+  const { controller, session, reload } = fixture()
+  const batch = { total: 50, offset: 0 }
+  const legacy = reviews(batch).map(({ nextSteps, ...review }) => review)
+  assert.equal(validateAgentReviews(legacy, agentBatch(batch), ['protocol']).length, 10)
+  assert.throws(() => validateAgentReviews(legacy, agentBatch(batch), ['protocol'], { requireNextSteps: true }))
+  const run = controller.startRun(session.id, 'Review the study', { mode: 'openai' })
+  for (let offset = 0; offset < 50; offset += 10) controller.appendAgentReviews(session.id, run.id, reviews({ total: 50, offset }).map(({ nextSteps, ...review }) => review))
+  controller.finishRun(session.id, run.id, { content: 'Old question-only summary', model: 'mock-model' })
+  const recovered = reload().state.sessions.find(item => item.id === session.id)
+  assert.equal(recovered.runs[0].status, 'completed')
+  assert.equal(recovered.runs[0].agentReviews.length, 50)
+  assert(recovered.messages[1].content.includes(legacy[0].summary))
+  assert(recovered.messages[1].content.includes('Sources: Protocol.md'))
+  assert(!recovered.messages[1].content.includes('Old question-only summary'))
+  assert(!recovered.messages[1].content.includes('Recommended next steps'))
+})
+
+test('300-agent summaries fit the saved answer limit while each complete review remains in the graph', () => {
+  const documents = Array.from({ length: 4 }, (_, index) => ({ id: `document-${index}`, name: `${index}${'long-file-name'.repeat(22)}` }))
+  const all = reviewAgents(300).map((agent, index) => ({ agentId: agent.id, summary: `${index} ${'s'.repeat(590)}`, nextSteps: [`${index} ${'a'.repeat(190)}`, `${index} ${'b'.repeat(190)}`], questions: [`${index} ${'q'.repeat(190)}`], topics: ['consent', 'privacy'], sourceIds: documents.map(document => document.id) }))
+  const answer = reviewSummary(all, 300, documents)
+  assert(answer.length < 12000)
+  assert(answer.includes('300 of 300'))
+  const graph = createGeneratedSimulationGraph({ id: 'full', prompt: 'Review', status: 'completed', agentCount: 300, agentReviews: all, sources: documents })
+  assert.equal(graph.nodes.filter(node => node.type === 'agent').length, 300)
+  assert.equal(graph.nodes.find(node => node.id === 'agent-300').description, all[299].summary)
+  assert.equal(graph.nodes.find(node => node.id === 'agent-300').properties['Next steps'], all[299].nextSteps.join('\n\n'))
+  assert(graph.nodes.find(node => node.id === 'agent-300').properties['Source documents'].includes(documents[3].name))
 })
 
 test('queued graph has no findings; generated references and topics appear without changing stable agent IDs', () => {
@@ -110,8 +160,14 @@ for (const provider of ['openai', 'anthropic']) test(`${provider}: 300 actual re
   assert.equal(run.agentReviews.length, 300)
   assert.equal(run.progress, 100)
   assert.match(session.messages[1].content, /300 of 300/)
+  assert(session.messages[1].content.includes('Key insights'))
+  assert(session.messages[1].content.includes('Recommended next steps'))
+  assert(session.messages[1].content.includes('Sources: Protocol.md'))
   assert(calls.every(call => call.context.documents[0].text === 'Consent is required.'))
-  assert.equal(reload().state.sessions.find(item => item.id === session.id).runs[0].agentReviews.length, 300)
+  const recovered = reload().state.sessions.find(item => item.id === session.id)
+  assert.equal(recovered.runs[0].agentReviews.length, 300)
+  assert.deepEqual(recovered.runs[0].agentReviews[0].nextSteps, run.agentReviews[0].nextSteps)
+  assert.equal(recovered.messages[1].content, session.messages[1].content)
 })
 
 test('partial results survive a failure and reload; stop aborts queued work and rejects late results', async () => {

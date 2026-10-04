@@ -6,10 +6,11 @@ const OUTPUT_LIMITS = [4000, 8000];
 function batchSchema(agents, sourceIds) {
   const review = {
     type: 'object', additionalProperties: false,
-    required: ['summary', 'questions', 'topics', 'sourceIds'],
+    required: ['summary', 'nextSteps', 'questions', 'topics', 'sourceIds'],
     properties: {
       summary: { type: 'string', minLength: 1, maxLength: 600 },
-      questions: { type: 'array', minItems: 1, maxItems: 2, items: { type: 'string', minLength: 1, maxLength: 200 } },
+      nextSteps: { type: 'array', minItems: 1, maxItems: 2, items: { type: 'string', minLength: 1, maxLength: 200 } },
+      questions: { type: 'array', maxItems: 2, items: { type: 'string', minLength: 1, maxLength: 200 } },
       topics: { type: 'array', minItems: 1, maxItems: 3, items: { type: 'string', enum: REVIEW_TOPICS } },
       sourceIds: { type: 'array', maxItems: Math.min(4, sourceIds.length), items: {
         type: 'string', ...(sourceIds.length ? { enum: sourceIds } : {}),
@@ -33,7 +34,7 @@ export async function generateAgentBatch({ batch, provider, model, input, source
     throw new HttpError(400, 'invalid_agent_batch', error.message);
   }
   const schema = batchSchema(agents, sourceIds);
-  const instructions = `Generate one distinct research ethics review for EACH of the ten fictional agent perspectives listed below. Each perspective combines its role and review lens. These are composite AI perspectives, never actual university board members. Use the supplied study and any server-verified institution guidance. Do not invent institutional rules, clinical recommendations, empirical findings, or numerical predictions. Separate observed information from missing evidence. Return only a JSON object matching this schema: ${JSON.stringify(schema)}. The reviews field is an object keyed by the exact listed agent IDs, with every key present exactly once. Keep each summary under 400 characters and each question under 160 characters. Include one or two actionable, study-specific questions. Choose one to three relevant topics. Cite only the exact allowed document IDs that actually support the review; never filenames, URLs, institutional source IDs, or agent IDs. Use an empty sourceIds array when none do. Do not invent agent interactions or source citations. Allowed document IDs: ${JSON.stringify(sourceIds)}. Perspectives: ${JSON.stringify(agents)}.${CONTEXT_INSTRUCTIONS}`;
+  const instructions = `Generate one distinct research ethics review for EACH of the ten fictional agent perspectives listed below. Each perspective combines its role and review lens. These are composite AI perspectives, never actual university board members. Answer the researcher's question using the supplied study and any server-verified institution guidance. The summary must state a specific insight, answer, or document conflict and explain its practical implication; do not substitute a question or a generic request to check something. Give one or two concrete preparation actions in nextSteps, naming the responsible role when established by the supplied context. Distinguish documented facts from possible implications and missing evidence. Do not invent institutional rules, clinical recommendations, empirical findings, or numerical predictions. Questions are optional: include at most one important unresolved question, and return an empty questions array when the supplied context already answers it. Return only a JSON object matching this schema: ${JSON.stringify(schema)}. The reviews field is an object keyed by the exact listed agent IDs, with every key present exactly once. Keep each summary under 400 characters, each next step under 160 characters, and each question under 160 characters. Choose one to three relevant topics. Cite only the exact allowed document IDs that actually support the review; never filenames, URLs, institutional source IDs, or agent IDs. Use an empty sourceIds array when none do. Do not invent agent interactions or source citations. Allowed document IDs: ${JSON.stringify(sourceIds)}. Perspectives: ${JSON.stringify(agents)}.${CONTEXT_INSTRUCTIONS}`;
   let correction = '';
   for (const [attempt, limit] of OUTPUT_LIMITS.entries()) {
     const attemptInstructions = instructions + correction;
@@ -60,7 +61,7 @@ export async function generateAgentBatch({ batch, provider, model, input, source
       const parsed = JSON.parse(text);
       if (!parsed.reviews || Array.isArray(parsed.reviews) || typeof parsed.reviews !== 'object') throw new Error('Invalid review slots');
       const entries = Object.entries(parsed.reviews).map(([agentId, review]) => ({ ...review, agentId }));
-      const reviews = validateAgentReviews(entries, agents, sourceIds);
+      const reviews = validateAgentReviews(entries, agents, sourceIds, { requireNextSteps: true });
       return { reviews, agentCount: batch.total, offset: batch.offset, provider, model };
     } catch {
       if (attempt === 0) {

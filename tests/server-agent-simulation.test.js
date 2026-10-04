@@ -13,7 +13,7 @@ const apiKey = `sk-${'a'.repeat(40)}`;
 const anthropicKey = `sk-ant-${'b'.repeat(50)}`;
 const workspaceId = `wrkspc_${'c'.repeat(24)}`;
 const batch = { offset: 290, total: 300 };
-const reviews = () => agentBatch(batch).map(agent => ({ agentId: agent.id, summary: 'The protocol needs a clear consent comprehension check.', questions: ['How will comprehension be checked?'], topics: ['consent'], sourceIds: ['doc-8'] }));
+const reviews = () => agentBatch(batch).map(agent => ({ agentId: agent.id, summary: 'The protocol does not document a consent comprehension check, leaving understanding unverified.', nextSteps: ['Document a comprehension check in the consent process before recruitment.'], questions: ['Who will document comprehension?'], topics: ['consent'], sourceIds: ['doc-8'] }));
 const reviewOutput = (entries = reviews()) => ({ reviews: Object.fromEntries(entries.map(({ agentId, ...review }) => [agentId, review])) });
 const complete = (provider, text) => provider === 'anthropic'
   ? { type: 'message', role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text }] }
@@ -56,6 +56,10 @@ for (const provider of ['openai', 'anthropic']) {
     assert.match(instructions, /agent-291/);
     assert.match(instructions, /doc-8/);
     assert.match(instructions, /never actual university board members/);
+    assert.match(instructions, /Answer the researcher's question/);
+    assert.match(instructions, /summary must state a specific insight/);
+    assert.match(instructions, /Questions are optional/);
+    assert.match(result.reviews[0].nextSteps[0], /before recruitment/);
     assert(!JSON.stringify(call.payload).includes(apiKey));
     assert(!JSON.stringify(result).includes(apiKey));
     if (provider === 'openai') {
@@ -66,6 +70,7 @@ for (const provider of ['openai', 'anthropic']) {
       assert.equal(slots.additionalProperties, false);
       assert.deepEqual(slots.required, agentBatch(batch).map(agent => agent.id));
       assert.deepEqual(Object.keys(slots.properties), slots.required);
+      assert(slots.properties['agent-291'].required.includes('nextSteps'));
       assert.deepEqual(slots.properties['agent-291'].properties.sourceIds.items.enum, Array.from({ length: 9 }, (_, index) => `doc-${index}`));
       assert.equal(call.init.headers.Authorization, `Bearer ${apiKey}`);
     } else {
@@ -98,6 +103,7 @@ for (const provider of ['openai', 'anthropic']) {
       reviewOutput(good.slice(1)),
       reviewOutput([{ ...good[0], agentId: 'agent-unknown' }, ...good.slice(1)]),
       reviewOutput([{ ...good[0], topics: ['invented-topic'] }, ...good.slice(1)]),
+      reviewOutput([{ ...good[0], nextSteps: [] }, ...good.slice(1)]),
       { reviews: good },
       null,
     ]) {
@@ -116,6 +122,13 @@ for (const provider of ['openai', 'anthropic']) {
       assert.deepEqual(result.reviews, good);
     }
   });
+
+  test(`${provider}: answered reviews can return insights and next steps without manufacturing a question`, async () => {
+    const answered = reviews().map(review => ({ ...review, questions: [] }));
+    const { response, result } = await request(provider, async () => Response.json(complete(provider, JSON.stringify(reviewOutput(answered)))));
+    assert.equal(response.status, 200);
+    assert.deepEqual(result.reviews, answered);
+  });
 }
 
 test('invented citations, missing agents, duplicate IDs and unreadable output fail closed with safe errors', async () => {
@@ -124,6 +137,7 @@ test('invented citations, missing agents, duplicate IDs and unreadable output fa
     JSON.stringify(reviewOutput([{ ...good[0], sourceIds: ['not-supplied'] }, ...good.slice(1)])),
     JSON.stringify(reviewOutput(good.slice(1))),
     JSON.stringify(reviewOutput([good[1], ...good.slice(1)])),
+    JSON.stringify(reviewOutput(good.map(({ nextSteps, ...review }) => review))),
     `invalid JSON containing ${apiKey}`,
   ]) {
     let calls = 0;

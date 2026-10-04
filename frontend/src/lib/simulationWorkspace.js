@@ -1,4 +1,4 @@
-import { AGENT_MIN, reviewAgents, validateAgentReviews } from '../../../shared/reviewAgents.js'
+import { AGENT_MIN, reviewAgents, reviewSummary, validateAgentReviews } from '../../../shared/reviewAgents.js'
 export const STORAGE_KEY = 'microfish.workspace.v1'
 export const PROMPT_LIMIT = 2000
 export const TITLE_LIMIT = 80
@@ -125,6 +125,7 @@ function normalizeSession(raw, now) {
   for (const message of messages) {
     const run = runs.find(run => run.id === message.runId)
     if (message.role === 'assistant' && isAIRun(run?.mode) && run.status !== 'completed') message.content = assistantContent(run)
+    if (message.role === 'assistant' && run?.status === 'completed' && run.agentReviews) message.content = reviewSummary(run.agentReviews, run.agentCount, run.sources)
   }
   const latestRun = runs.at(-1)
   const interruptedRun = latestRun?.interrupted ? latestRun : null

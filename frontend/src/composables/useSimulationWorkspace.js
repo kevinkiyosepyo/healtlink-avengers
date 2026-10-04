@@ -66,7 +66,7 @@ export function createOpenAIRunTransport(controller, {
         }
         await Promise.all(Array.from({ length: AGENT_CONCURRENCY }, worker))
         request.abort.signal.throwIfAborted()
-        controller.finishRun(sessionId, run.id, { content: reviewSummary(run.agentReviews, run.agentCount), model })
+        controller.finishRun(sessionId, run.id, { content: reviewSummary(run.agentReviews, run.agentCount, run.sources), model })
       } catch (error) {
         // stopRun/deleteSession already made the run terminal before aborting.
         // A late server response or rejection cannot replace that state.

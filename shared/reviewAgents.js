@@ -83,7 +83,7 @@ function reviewText(value, limit) {
 
 // Shared by the provider boundary, browser transport, and saved-run recovery.
 // A graph edge can only cite a source actually supplied to this run.
-export function validateAgentReviews(reviews, expectedAgents, sourceIds, { partial = false } = {}) {
+export function validateAgentReviews(reviews, expectedAgents, sourceIds, { partial = false, requireNextSteps = false } = {}) {
   if (!Array.isArray(reviews) || reviews.length > expectedAgents.length || (!partial && reviews.length !== expectedAgents.length)) {
     throw new Error('The AI returned an incomplete agent batch. Completed reviews are preserved; retry the simulation.')
   }
@@ -93,7 +93,14 @@ export function validateAgentReviews(reviews, expectedAgents, sourceIds, { parti
   return reviews.map(review => {
     if (!review || !allowed.has(review.agentId) || seen.has(review.agentId)) throw new Error('The AI returned duplicate or unknown agents.')
     seen.add(review.agentId)
-    if (!Array.isArray(review.questions) || review.questions.length < 1 || review.questions.length > 2) throw new Error('An agent returned invalid review questions.')
+    if (!Array.isArray(review.questions) || review.questions.length > 2) throw new Error('An agent returned invalid review questions.')
+    let nextSteps
+    // Older saved reviews did not return preparation steps. Keep their findings
+    // readable, while requiring actual model-generated steps for new batches.
+    if (review.nextSteps !== undefined || requireNextSteps) {
+      if (!Array.isArray(review.nextSteps) || review.nextSteps.length < 1 || review.nextSteps.length > 2) throw new Error('An agent returned invalid preparation steps.')
+      nextSteps = review.nextSteps.map(step => reviewText(step, 200))
+    }
     if (!Array.isArray(review.topics) || review.topics.length < 1 || review.topics.length > 3 || review.topics.some(topic => !REVIEW_TOPICS.includes(topic))) {
       throw new Error('An agent returned an unknown review topic.')
     }
@@ -103,22 +110,55 @@ export function validateAgentReviews(reviews, expectedAgents, sourceIds, { parti
     return {
       agentId: review.agentId, summary: reviewText(review.summary, 600),
       questions: review.questions.map(question => reviewText(question, 200)),
+      ...(nextSteps ? { nextSteps } : {}),
       topics: [...new Set(review.topics)], sourceIds: [...new Set(review.sourceIds)],
     }
   })
 }
 
-export function reviewSummary(reviews, count) {
+export function reviewSummary(reviews, count, sources = []) {
   const counts = new Map(REVIEW_TOPICS.map(topic => [topic, 0]))
   for (const review of reviews) for (const topic of review.topics) counts.set(topic, counts.get(topic) + 1)
   const topics = [...counts].filter(([, value]) => value).sort((a, b) => b[1] - a[1])
-  const selected = topics.map(([topic]) => reviews.find(review => review.topics.includes(topic)))
-    .filter((review, index, all) => all.findIndex(entry => entry.agentId === review.agentId) === index)
+  const ordered = [...reviews].sort((a, b) => a.agentId.localeCompare(b.agentId))
+  const selected = [], seen = new Set()
+  const key = text => text.trim().replace(/\s+/g, ' ').toLowerCase()
+  function select(review) {
+    if (!review || selected.length >= 8 || seen.has(key(review.summary))) return
+    seen.add(key(review.summary))
+    selected.push(review)
+  }
+  for (const [topic] of topics) select(ordered.find(review => review.topics.includes(topic) && !seen.has(key(review.summary))))
+  for (const review of ordered) select(review)
+  const agents = new Map(reviewAgents(count).map(agent => [agent.id, agent]))
+  const sourceNames = new Map(sources.map(source => [source.id, source.name]))
+  function references(review) {
+    if (!review.sourceIds.length) return 'No document citation returned.'
+    const names = review.sourceIds.slice(0, 2).map(id => {
+      const name = sourceNames.get(id) || id
+      return name.length > 80 ? name.slice(0, 77) + '…' : name
+    })
+    return `Sources: ${names.join(', ')}${review.sourceIds.length > 2 ? ` (+${review.sourceIds.length - 2} more in the graph)` : ''}.`
+  }
+  const candidates = [...selected, ...ordered.filter(review => !selected.includes(review))]
+  const steps = [], questions = [], stepKeys = new Set(), questionKeys = new Set()
+  for (const review of candidates) {
+    for (const step of review.nextSteps || []) if (steps.length < 6 && !stepKeys.has(key(step))) {
+      stepKeys.add(key(step))
+      steps.push(`${steps.length + 1}. ${step}\n${references(review)}`)
+    }
+    for (const question of review.questions) if (questions.length < 3 && !questionKeys.has(key(question))) {
+      questionKeys.add(key(question))
+      questions.push(`• ${question}`)
+    }
+  }
   return [
-    `Exploratory AI review · ${reviews.length} of ${count} agent perspectives completed`,
-    'These fictional perspectives are generated in batches. They are preparation for review, not actual board member statements or IRB decisions.',
-    'Open the knowledge graph to inspect every agent, its questions, and its supplied document references.',
-    '', 'Review topics', ...topics.map(([topic, value]) => `${TOPIC_LABELS[topic]}: ${value} agent reviews`),
-    '', 'Questions to explore', ...selected.map(review => `${review.agentId}: ${review.questions[0]}`),
+    `AI study review · ${reviews.length} of ${count} agent perspectives completed`,
+    'Key insights',
+    ...selected.map((review, index) => `${index + 1}. ${review.summary}\n${agents.get(review.agentId).role} · ${references(review)}`),
+    ...(steps.length ? ['Recommended next steps', ...steps] : []),
+    ...(questions.length ? ['Remaining uncertainties', ...questions] : []),
+    'Review coverage', topics.map(([topic, value]) => `${TOPIC_LABELS[topic]}: ${value} reviews`).join(' · '),
+    'These are AI interpretations of the supplied context, not verified research findings or an IRB decision. Open the graph to inspect all agent reviews and references.',
   ].join('\n\n')
 }

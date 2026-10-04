@@ -40,7 +40,11 @@ export function createGeneratedSimulationGraph(run, context, title, response = '
       node(agent.id, `${agent.id.slice(-3)} · ${agent.role}`, review ? 'agent' : 'queued',
         review?.summary || (run.status === 'running' ? 'Queued for AI review. No finding has been generated for this agent yet.' : 'This agent has no completed review.'),
         Math.cos(angle) * radius, Math.sin(angle) * radius,
-        { Role: agent.role, Lens: agent.lens, Status: review ? 'Reviewed' : 'Awaiting review', ...(review ? { Questions: review.questions.join('\n\n'), 'Source IDs': review.sourceIds.join(', ') || 'No document reference returned' } : {}) })
+        { Role: agent.role, Lens: agent.lens, Status: review ? 'Reviewed' : 'Awaiting review', ...(review ? {
+          ...(review.nextSteps?.length ? { 'Next steps': review.nextSteps.join('\n\n') } : {}),
+          ...(review.questions.length ? { Questions: review.questions.join('\n\n') } : {}),
+          'Source documents': review.sourceIds.map(id => sources.find(source => source.id === id)?.name || id).join(', ') || 'No document citation returned',
+        } : {}) })
       link('study', agent.id, review ? 'Returned an AI review' : 'Selected review perspective')
       if (!review) return
       for (const topic of review.topics) link(agent.id, `topic:${topic}`, 'Raises review topic')
@@ -57,7 +61,7 @@ export function createGeneratedSimulationGraph(run, context, title, response = '
     mode: 'generated', runId: run.id, nodes, links, types: TYPES.filter(type => nodes.some(node => node.type === type.id)),
     title: 'Study knowledge graph', completedCount: reviews.size, agentCount: run.agentCount,
     description: run.agentReviews
-      ? `${reviews.size} / ${run.agentCount} agents reviewed. Select an agent to read its questions and document references.${reviews.size < run.agentCount ? ' Gray agents have no completed review yet.' : ''}`
+      ? `${reviews.size} / ${run.agentCount} agents reviewed. Select an agent to read its insights, next steps, and document references.${reviews.size < run.agentCount ? ' Gray agents have no completed review yet.' : ''}`
       : 'Response map for the saved three-perspective review. Choose 50–300 agents in setup for a live agent graph.',
   }
 }
