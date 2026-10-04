@@ -85,6 +85,10 @@ No shadows in-app. Depth = surface step + hairline (`canvas → surface → surf
 - Tabs: **consensus** (recommendation chip, the decision sentence, the panel estimate beside the *computed* cross-check, the calculation in `.code-text`, key points with `S#` citation chips, dissent, evidence gaps, citation-audit line); **debate** (per agent: opening → final estimate, claims with strength, rebuttal responses as agree/partly/disagree badges, revised position); **provenance** (numbered pipeline of queries, database log with links, web filtering with excluded links, and the evidence pack where each source shows its link, metadata, credibility badge with an expandable "why", relevance, and who cited it).
 - Citation chips use site-tone outlines and never lowercase their ids. Clicking one switches to provenance and highlights the source with an accent ring. "uncited" chips use amber.
 
+## 6e. Source library
+- Tool page (`#/library`): a dashed dropzone (accent tint on hover/drag), an indexing badge with a 2px progress bar, and paste-text fields | a document list (name, type, pages, passages, date, delete) and a "test retrieval" box showing passages with document · page · line · similarity in `.code-text` (names keep their case).
+- In the evidence panel, library passages show a "your source · not externally verified" badge instead of a credibility score, plus page/line/char location; the pipeline gains a "your source library" step stating that only matched excerpts were sent.
+
 ## 7. Graph view: knowledge graph (Vue Flow + d3-force)
 - Canvas `--canvas` with a faint dot grid. Layout comes from d3-force (link, charge, collide, center). Dragging a node pins it while neighbors follow, and on release it settles back.
 - **Category colors** (muted and warm-leaning, never brighter than the accent; separate light/dark values): `--kg-core` coral (the protocol change), `--kg-participant` sage, `--kg-site` slate blue, `--kg-oversight` ochre, `--kg-sponsor` taupe, `--kg-data` mauve. Coral as an *activity* signal belongs only to running state.

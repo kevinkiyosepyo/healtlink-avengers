@@ -28,6 +28,10 @@ After the stakeholder scores, five agents deliberate: a clinical trialist, a par
 4. Agents state positions with arithmetic and cited sources (`S1`, `S2`, …), rebut each other, and revise. A moderator writes the group decision. microfish also computes an independent confidence-weighted cross-check of the agents' estimates.
 5. The **provenance** tab shows every query, database response, source (with link, credibility breakdown and which claims cite it) and excluded link. Invalid citations are dropped and uncited claims flagged.
 
+## Source library (bring your own sources)
+
+Open **source library** and add PDFs, text, markdown or CSV files, or paste notes (site reports, survey summaries, protocol sections, policy memos). They're chunked and embedded in your browser. During each deliberation the closest passages join the evidence as `S#` sources marked "team document · not externally verified", and the provenance tab shows the document, page, line and similarity. Only matched excerpts are sent to OpenAI; the documents themselves stay on your device and aren't part of cloud backup. Scanned PDFs need OCR first.
+
 ## Cloud (optional)
 
 Sign in with Google, then turn on **cloud backup** in model & data to copy records and chats to encrypted DynamoDB storage under your account. Restore on another device or delete the cloud copy at any time. Deploying: see `infra/aws/README.md` (one container on App Runner, built from the `Dockerfile`).
