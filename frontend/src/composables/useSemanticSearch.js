@@ -1,5 +1,6 @@
 import { ref, shallowRef, watch } from "vue";
 import { createStore, del, get, keys, set } from "idb-keyval";
+import { getEmbedder } from "../lib/embedder.js";
 
 let instance;
 
@@ -17,18 +18,8 @@ export function useSemanticSearch(sessions) {
   const progress = ref(0);
   const indexSize = ref(0);
   const index = shallowRef(null);
-  let worker;
-  let nextId = 0;
-  const pending = new Map();
+  const embedder = getEmbedder();
   let syncing = Promise.resolve();
-
-  function embed(texts) {
-    return new Promise((resolve, reject) => {
-      const id = ++nextId;
-      pending.set(id, { resolve, reject });
-      worker.postMessage({ type: "embed", id, texts });
-    });
-  }
 
   let cache = null;
   try {
@@ -49,21 +40,11 @@ export function useSemanticSearch(sessions) {
     if (status.value !== "idle") return;
     status.value = "loading";
     try {
-      worker = new Worker(new URL("../workers/embed.worker.js", import.meta.url), { type: "module" });
-      worker.addEventListener("message", ({ data }) => {
-        if (data.type === "progress") progress.value = Math.round(data.progress);
-        else if (data.type === "result" || data.type === "error") {
-          const request = pending.get(data.id);
-          pending.delete(data.id);
-          if (data.type === "result") request?.resolve(data.vectors);
-          else request?.reject(new Error(data.message));
-        }
-      });
-      worker.addEventListener("error", () => fail());
+      embedder.onProgress((value) => (progress.value = value));
       // Orama is loaded on demand so it stays out of the first-paint bundle.
       const { createSemanticIndex, documentsFromSessions, textKey } = await loadIndexLib();
       liveTextKeys = (list) => new Set(documentsFromSessions(list).map((doc) => textKey(doc.text)));
-      const created = await createSemanticIndex({ embed, cache });
+      const created = await createSemanticIndex({ embed: embedder.embed, cache });
       // First sync runs unqueued so a model failure surfaces as "unavailable".
       await created.sync(sessions.value);
       index.value = created;
@@ -76,8 +57,6 @@ export function useSemanticSearch(sessions) {
   }
   function fail() {
     status.value = "unavailable";
-    for (const request of pending.values()) request.reject(new Error("embedding worker unavailable"));
-    pending.clear();
   }
 
   // Serialize syncs so overlapping edits never race inside the index.

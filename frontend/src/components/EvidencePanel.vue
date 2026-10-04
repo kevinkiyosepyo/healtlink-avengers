@@ -15,8 +15,8 @@ const props = defineProps({
 });
 const emit = defineEmits(["deliberate"]);
 
-const STAGES = ["planning", "retrieving", "web", "opening", "rebuttal", "consensus"];
-const STAGE_LABELS = { planning: "plan", retrieving: "scholarly search", web: "web (secondary)", opening: "opening positions", rebuttal: "rebuttals", consensus: "consensus" };
+const STAGES = ["planning", "retrieving", "library", "web", "opening", "rebuttal", "consensus"];
+const STAGE_LABELS = { planning: "plan", retrieving: "scholarly search", library: "your library", web: "web (secondary)", opening: "opening positions", rebuttal: "rebuttals", consensus: "consensus" };
 const RECOMMENDATION = {
   proceed: { status: "completed", label: "proceed" },
   proceed_with_changes: { status: "running", label: "proceed with changes" },
@@ -59,10 +59,10 @@ function toggleReasons(sid) {
 const fmt = (e) => (e ? `${e.value} ${unit.value} (${e.low} to ${e.high})` : "—");
 
 function exportSources() {
-  const header = ["sid", "title", "database", "type", "year", "venue", "credibility", "tier", "credibility_reasons", "url", "doi", "pmid", "nct", "cited_by", "found_by_query"];
+  const header = ["sid", "title", "database", "type", "year", "venue", "credibility", "tier", "credibility_reasons", "url", "doi", "pmid", "nct", "library_location", "cited_by", "found_by_query"];
   const rows = [header.join(",")];
   for (const s of d.value.pack) {
-    rows.push([s.sid, s.title, s.database, s.studyTypes.join("; "), s.year, s.venue, s.credibility.score, s.credibility.tier, s.credibility.reasons.join("; "), s.url, s.doi, s.pmid, s.nct, (citedBy.value[s.sid] ?? []).join("; "), s.foundBy?.query].map(csvCell).join(","));
+    rows.push([s.sid, s.title, s.database, s.studyTypes.join("; "), s.year, s.venue, s.credibility.score, s.credibility.tier, s.credibility.reasons.join("; "), s.url, s.doi, s.pmid, s.nct, s.location ? `${s.venue}${s.location.page ? ` p.${s.location.page}` : ""} line ${s.location.line}` : "", (citedBy.value[s.sid] ?? []).join("; "), s.foundBy?.query].map(csvCell).join(","));
   }
   downloadText(`microfish-evidence-${stamp()}.csv`, "text/csv;charset=utf-8", rows.join("\n"));
 }
@@ -185,8 +185,13 @@ function exportSources() {
             </ul>
             <span class="mono faint">{{ d.retrieval.considered }} unique sources · {{ d.retrieval.retractedRemoved }} retracted removed · {{ d.retrieval.irrelevantDropped ?? 0 }} off-topic dropped · top {{ d.pack.filter((s) => s.kind !== "web").length }} kept (60% credibility, 40% relevance)</span>
           </li>
+          <li v-if="d.library?.enabled">
+            <span class="mono label">3 · your source library (local)</span>
+            <span v-if="d.library.error" class="mono faint">unavailable ({{ d.library.error }})</span>
+            <span v-else class="mono faint">{{ d.library.used }} passage{{ d.library.used === 1 ? "" : "s" }} matched — only these excerpts were sent to the model</span>
+          </li>
           <li>
-            <span class="mono label">3 · web search (secondary, credibility-filtered)</span>
+            <span class="mono label">{{ d.library?.enabled ? 4 : 3 }} · web search (secondary, credibility-filtered)</span>
             <span v-if="d.web.error" class="mono faint">unavailable with this model ({{ d.web.error }}) — scholarly evidence only</span>
             <span v-else class="mono faint">{{ d.web.used }} credible pages kept · {{ d.web.excluded.length }} excluded</span>
             <details v-if="d.web.excluded.length" class="excluded">
@@ -195,7 +200,7 @@ function exportSources() {
             </details>
           </li>
           <li>
-            <span class="mono label">4 · evidence pack the agents saw</span>
+            <span class="mono label">{{ d.library?.enabled ? 5 : 4 }} · evidence pack the agents saw</span>
             <button class="mini-btn" @click="exportSources"><Download :size="12" /> sources csv</button>
           </li>
         </ol>
@@ -204,13 +209,20 @@ function exportSources() {
           <li v-for="s in d.pack" :id="`src-${s.sid}`" :key="s.sid" :class="{ hi: highlighted === s.sid }">
             <div class="src-head">
               <span class="chip mono">{{ s.sid }}</span>
-              <a :href="s.url" target="_blank" rel="noopener noreferrer" class="src-title">{{ s.title }} <ExternalLink :size="11" /></a>
+              <a v-if="s.url" :href="s.url" target="_blank" rel="noopener noreferrer" class="src-title">{{ s.title }} <ExternalLink :size="11" /></a>
+              <span v-else class="src-title">{{ s.title }}</span>
             </div>
-            <p class="mono faint src-meta">
-              {{ [s.database, s.studyTypes.slice(0, 2).join(", "), s.year, s.venue, s.status?.toLowerCase(), s.doi ? `doi ${s.doi}` : null, s.pmid ? `pmid ${s.pmid}` : null, s.nct].filter(Boolean).join(" · ") }}
+            <p class="faint src-meta" :class="s.kind === 'document' ? 'code-text' : 'mono'">
+              <template v-if="s.kind === 'document'">your library · {{ s.venue }}{{ s.location?.page ? ` · page ${s.location.page}` : "" }} · line {{ s.location?.line }} · chars {{ s.location?.start }}–{{ s.location?.end }}</template>
+              <template v-else>{{ [s.database, s.studyTypes.slice(0, 2).join(", "), s.year, s.venue, s.status?.toLowerCase(), s.doi ? `doi ${s.doi}` : null, s.pmid ? `pmid ${s.pmid}` : null, s.nct].filter(Boolean).join(" · ") }}</template>
             </p>
             <div class="src-cred">
-              <StatusBadge size="sm" :status="s.credibility.tier === 'high' ? 'completed' : s.credibility.tier === 'moderate' ? 'running' : 'draft'" :label="`credibility ${s.credibility.score}`" :meta="s.credibility.tier" />
+              <StatusBadge
+                size="sm"
+                :status="s.credibility.tier === 'high' ? 'completed' : s.credibility.tier === 'moderate' || s.credibility.tier === 'yours' ? 'running' : 'draft'"
+                :label="s.kind === 'document' ? 'your source' : `credibility ${s.credibility.score}`"
+                :meta="s.kind === 'document' ? 'not externally verified' : s.credibility.tier"
+              />
               <button class="link-btn" @click="toggleReasons(s.sid)">{{ openReasons.has(s.sid) ? "hide" : "why" }}</button>
               <span v-if="s.relevance !== null && s.relevance !== undefined" class="mono faint">relevance {{ Math.round(s.relevance * 100) }}%</span>
               <span class="mono faint">cited by {{ (citedBy[s.sid] ?? []).join(", ") || "no one" }}</span>
