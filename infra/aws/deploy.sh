@@ -7,8 +7,8 @@
 set -euo pipefail
 
 REGION="${AWS_REGION:-us-west-2}"
-STACK="${STACK_NAME:-microfish}"
-REPO="${ECR_REPO:-microfish}"
+STACK="${STACK_NAME:-lookahead}"
+REPO="${ECR_REPO:-lookahead}"
 TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)}"
 : "${AUTH_URL:?set AUTH_URL to the public https origin}"
 : "${AUTH_SECRET_ARN:?}" "${GOOGLE_ID_ARN:?}" "${GOOGLE_SECRET_ARN:?}"

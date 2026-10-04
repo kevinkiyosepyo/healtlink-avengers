@@ -66,7 +66,7 @@ export function useResearcherAccount() {
   })
 
   const chatgpt = () => action(async () => {
-    if (!account.providers.chatgpt) throw new Error('ChatGPT sign-in is awaiting OpenAI approval and setup for Microfish.')
+    if (!account.providers.chatgpt) throw new Error('ChatGPT sign-in is awaiting OpenAI approval and setup for lookahead.')
     const result = await authAction('signin/chatgpt')
     const destination = new URL(result.url, window.location.origin)
     if (destination.origin !== window.location.origin && destination.origin !== 'https://auth.openai.com') {

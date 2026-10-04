@@ -1,18 +1,20 @@
 # Researcher sign-in and OpenAI connection
+> **Renamed:** the product is now lookahead. Update the OAuth consent-screen app name in Google Cloud Console to match; redirect URIs are unchanged.
+
 
 The app starts at `/#/login`. Researchers can sign in with a verified Google account, including a consumer Gmail account, and enter the workspace in demo mode without connecting AI. The app does not restrict sign-in to a school or email domain. Google requests only `openid email profile`; it does not access Gmail messages. Whether Gmail mailbox access is wanted remains to be clarified.
 
-The researcher interface no longer asks for an OpenAI API key. Its ChatGPT connection remains unavailable until Microfish receives its own approved hosted OpenAI client and the plan-use integration is completed. The backend retains compatibility with existing API-key connections, but the new interface does not expose key entry.
+The researcher interface no longer asks for an OpenAI API key. Its ChatGPT connection remains unavailable until lookahead receives its own approved hosted OpenAI client and the plan-use integration is completed. The backend retains compatibility with existing API-key connections, but the new interface does not expose key entry.
 
 **ChatGPT subscription-powered simulations are not implemented or enabled yet.** OpenAI's current integration supports eligible plan usage, but remotely hosted applications must request access first. The published local dynamic-registration flow cannot be reused for this Vercel website. Identity-only sign-in never marks the AI connection as ready.
 
 ## Configure hosted ChatGPT sign-in
 
-1. Request Microfish's hosted client and **subscription usage** access through [OpenAI's interest form](https://openai.com/form/sign-in-with-chatgpt-interest/). Identity approval alone does not authorize inference using a subscriber's plan.
+1. Request lookahead's hosted client and **subscription usage** access through [OpenAI's interest form](https://openai.com/form/sign-in-with-chatgpt-interest/). Identity approval alone does not authorize inference using a subscriber's plan.
 2. Register these exact callback URLs with OpenAI:
    - Production: `https://health-link-hackathon.vercel.app/api/auth/callback/chatgpt`
    - Local development, if registered: `http://localhost:5173/api/auth/callback/chatgpt`
-3. After approval, set server-only `AUTH_OPENAI_ID` to Microfish's issued `oaiapp_…` web client ID and `AUTH_OPENAI_TOKEN_AUTH_METHOD` to the provisioned `none` or `client_secret_basic` method. Confidential clients also require `AUTH_OPENAI_SECRET`. Keep the existing `AUTH_URL` and `AUTH_SECRET`. Never use a Codex client ID, a researcher's local tokens, or `dynamic_agent_client` here.
+3. After approval, set server-only `AUTH_OPENAI_ID` to lookahead's issued `oaiapp_…` web client ID and `AUTH_OPENAI_TOKEN_AUTH_METHOD` to the provisioned `none` or `client_secret_basic` method. Confidential clients also require `AUTH_OPENAI_SECRET`. Keep the existing `AUTH_URL` and `AUTH_SECRET`. Never use a Codex client ID, a researcher's local tokens, or `dynamic_agent_client` here.
 4. Deploy those settings and verify a live login. The route uses discovered OpenAI endpoints, Auth.js state/PKCE/nonce checks, JWKS signature validation, and first-party encrypted session cookies. Public identity-only clients work without an access token; provider tokens are not retained or exposed to browser JavaScript. Local identities are scoped by verified issuer, client ID, and subject. Matching Google and ChatGPT emails are **not automatically linked**; these are separate sign-in methods/sessions.
 5. Before enabling subscription-powered simulations, obtain the hosted client's approved scopes, inference contract, eligible models, and token lifecycle requirements from OpenAI. Implement that approved contract, explicit plan consent, protected credential storage/refresh, usage-limit handling, and **Using ChatGPT plan / Manage usage** UI. The current identity-only integration intentionally requests just `openid profile email` and cannot make plan-funded requests. There is no environment flag that pretends this work is complete and no automatic fallback to separately billed API usage.
 

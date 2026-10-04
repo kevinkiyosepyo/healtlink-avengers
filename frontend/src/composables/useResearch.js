@@ -287,22 +287,22 @@ export function useResearch(sessions) {
   // ---------- export / delete ----------
   function exportRecords(list, format, name) {
     if (format === "csv") downloadText(`${name}.csv`, "text/csv;charset=utf-8", recordsToCsv(list));
-    else downloadText(`${name}.json`, "application/json", JSON.stringify({ exportedAt: new Date().toISOString(), app: "microfish", records: list }, null, 2));
+    else downloadText(`${name}.json`, "application/json", JSON.stringify({ exportedAt: new Date().toISOString(), app: "lookahead", records: list }, null, 2));
   }
   function exportRun(runId, format) {
     pruneRecords();
-    if (records[runId]) exportRecords([records[runId]], format, `microfish-run-${runId.slice(0, 8)}-${stamp()}`);
+    if (records[runId]) exportRecords([records[runId]], format, `lookahead-run-${runId.slice(0, 8)}-${stamp()}`);
   }
   function exportAll(format) {
     pruneRecords();
     const list = Object.values(records).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-    exportRecords(list, format, `microfish-records-${stamp()}`);
+    exportRecords(list, format, `lookahead-records-${stamp()}`);
   }
   async function deleteAllData() {
     await recordStorage.clear().catch(() => {});
     safely(() => indexedDB.deleteDatabase("microfish-embeddings"));
     safely(() => indexedDB.deleteDatabase("microfish-library"));
-    // Every key microfish writes; keep in sync when adding persisted state.
+    // Every key lookahead writes (internal names keep the original "microfish" prefix); keep in sync when adding persisted state.
     for (const key of [WORKSPACE_KEY, SETTINGS_KEY, "microfish:preflight", "microfish:timeline", "microfish:study-build", "microfish:library", "microfish:cloud-backup"]) {
       safely(() => window.localStorage.removeItem(key));
     }

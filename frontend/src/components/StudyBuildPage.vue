@@ -74,7 +74,7 @@ function exportCrf() {
     const at = b.value.visits.filter((v) => v.assessments.includes(form.id)).map((v) => v.name).join("; ");
     for (const f of form.fields) rows.push([form.id, f.name, f.label, f.type, f.unit, f.min, f.max, f.required, at].map(csvCell).join(","));
   }
-  downloadText(`microfish-crf-spec-${stamp()}.csv`, "text/csv;charset=utf-8", rows.join("\n"));
+  downloadText(`lookahead-crf-spec-${stamp()}.csv`, "text/csv;charset=utf-8", rows.join("\n"));
 }
 async function exportJson() {
   const data = {
@@ -83,7 +83,7 @@ async function exportJson() {
     sourceCheck: checked.value ? { visit: visitId.value, day0: day0.value, values: extraction.value.values, visitDate: extraction.value.visitDate, queries: queries.value } : null,
     assumptions: "Assessment durations and ranges come from a built-in demo library unless the protocol overrides them. Illustrative, not a validated EDC build.",
   };
-  downloadText(`microfish-study-build-${stamp()}.json`, "application/json", JSON.stringify(await createArtifact("study-build", data), null, 2));
+  downloadText(`lookahead-study-build-${stamp()}.json`, "application/json", JSON.stringify(await createArtifact("study-build", data), null, 2));
 }
 
 const heading = ref(null);

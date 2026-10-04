@@ -64,7 +64,7 @@ function exportSources() {
   for (const s of d.value.pack) {
     rows.push([s.sid, s.title, s.database, s.studyTypes.join("; "), s.year, s.venue, s.credibility.score, s.credibility.tier, s.credibility.reasons.join("; "), s.url, s.doi, s.pmid, s.nct, s.location ? `${s.venue}${s.location.page ? ` p.${s.location.page}` : ""} line ${s.location.line}` : "", (citedBy.value[s.sid] ?? []).join("; "), s.foundBy?.query].map(csvCell).join(","));
   }
-  downloadText(`microfish-evidence-${stamp()}.csv`, "text/csv;charset=utf-8", rows.join("\n"));
+  downloadText(`lookahead-evidence-${stamp()}.csv`, "text/csv;charset=utf-8", rows.join("\n"));
 }
 </script>
 

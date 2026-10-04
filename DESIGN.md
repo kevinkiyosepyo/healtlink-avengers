@@ -1,4 +1,4 @@
-# microfish — DESIGN.md
+# lookahead — DESIGN.md
 
 Merges two sources:
 - **Accents (portfolio):** `awesome-design/design-md/rauno`, plus the mykm.dev voice you described: lowercase, mono labels, split-letter boot, ⮡ glyphs.
@@ -8,6 +8,12 @@ Rule of thumb: **the portfolio voice lives in labels, transitions and empty stat
 
 ## 1. Atmosphere
 A craftsperson's notebook that happens to run simulations. Dark-first, warm near-black (not cold blue-grey), hairline borders instead of shadows, one coral accent. Text is lowercase and terse. Numbers, ids, timestamps and statuses are mono. Light theme follows `prefers-color-scheme` with the same tokens inverted.
+
+## 1b. Brand
+- Name: **lookahead**, always lowercase, with a coral period: `lookahead.`
+- Mark (`BrandMark.vue`): the "oo" are two outlined eyes whose coral pupils rest looking right, toward what's coming. On hover, and once on the boot screen, the pupils glance back and return ahead (1.6s, disabled under reduced motion).
+- Favicon: the same eyes on a 32px rounded tile, dark canvas with ink rings and coral pupils, inverted for light mode via an SVG media query.
+- Taglines: "see your trial before it runs." (social/OG) · "rehearse the trial before it reaches your sites." (welcome).
 
 ## 2. Color tokens
 | Token | Dark | Light | Role |
@@ -32,7 +38,7 @@ Status mapping: idle = `--faint`, running = `--accent` (pulsing), done = `--teal
 ## 3. Typography
 - **Sans:** Geist (fallback Inter). All UI and transcript text.
 - **Mono:** Geist Mono (fallback JetBrains Mono). Labels, metadata, counters, view switcher, timestamps, code.
-- **Voice:** lowercase everywhere in chrome: `new simulation`, `search`, `running · 3 agents`. Sentence case only inside user and model message bodies. Brand is `microfish.` with the period in `--accent`.
+- **Voice:** lowercase everywhere in chrome: `new simulation`, `search`, `running · 3 agents`. Sentence case only inside user and model message bodies. Brand is `lookahead.` with the period in `--accent`.
 
 | Role | Font | Size / line | Weight | Tracking |
 |---|---|---|---|---|
@@ -56,13 +62,13 @@ Density: this is an app, so body is 14.5px and the transcript column is up to **
 No shadows in-app. Depth = surface step + hairline (`canvas → surface → surface-raised`). The only shadow is on dialogs and menus: `0 24px 48px rgba(0,0,0,.5)` in dark, `0 12px 32px rgba(20,20,19,.12)` in light. Hover is a surface step, never a layout shift.
 
 ## 6. Components (shadcn-vue / Reka UI, restyled by these tokens)
-- **Sidebar:** `surface` fill, hairline right edge. Top: `microfish.` wordmark + collapse. Then `new simulation` (ghost button, mono hint `⌘K`). Then search input (command-palette style, filters live). Then a mono section label `chats` and rows: 32px, title + mono status `● running · 2 runs`. Row menu is a dropdown (rename, delete). Rename and delete confirm via dialog. Footer: mono `local demo` badge and a workspace identity.
+- **Sidebar:** `surface` fill, hairline right edge. Top: `lookahead.` wordmark + collapse. Then `new simulation` (ghost button, mono hint `⌘K`). Then search input (command-palette style, filters live). Then a mono section label `chats` and rows: 32px, title + mono status `● running · 2 runs`. Row menu is a dropdown (rename, delete). Rename and delete confirm via dialog. Footer: mono `local demo` badge and a workspace identity.
 - **Buttons:** primary = `--accent` fill, white text, 32px, 8px radius. Secondary = `surface-raised` + hairline. Ghost = text only; hover shows a dotted underline that animates in. Destructive = `--danger` text on ghost, filled only inside the confirm dialog.
 - **Links:** prefixed with `⮡` in mono, `--muted`. On hover the glyph shifts 2px right/down and the text goes `--ink`. Used for: follow-up suggestions, "open in graph", docs, source links.
 - **Composer:** `surface-raised`, hairline, 12px radius, autosizing textarea, mono hint row below (`enter to run · shift+enter for newline`). Send is a 32px accent icon button. While running it becomes `stop` (danger ghost).
 - **Message blocks:** no bubbles. User = `--ink`, right-aligned mono label `you`. Model/run output = `--body`, left, with a mono run header `run 02 · 24s · 12 agents`. Hairline between runs.
 - **Status signature** (`StatusBadge`, modeled on Vercel's deployment states): 8px dot with a soft 3px halo in the state's tone, sans 12.5px label, then mono metadata separated by faint middots, e.g. `● running · 42% · 8s`, `● ready · 24s · 12 agents`, `● stopped · at 61% · 14s`. Running ripples the halo outward (no blinking). Draft is a hollow ring. Tones: running = accent, ready = teal, stopped = muted, blocked = danger. Chip variant (hairline border, `surface` fill) for the topbar and graph header; small variant in sidebar rows.
-- **Sample rack (loading):** while a run is active, five sample tubes fill in sequence with progress in the muted `--kg-*` colors, with bubbles in the active tube. A small coral "sus" microfish (an original character) peeks over the rack every 3.5–9s, glances around and ducks back. There's no peeking under reduced motion.
+- **Sample rack (loading):** while a run is active, five sample tubes fill in sequence with progress in the muted `--kg-*` colors, with bubbles in the active tube. A small coral "sus" lookahead (an original character) peeks over the rack every 3.5–9s, glances around and ducks back. There's no peeking under reduced motion.
 - **View switcher** (chat / graph / split): mono segmented control, lowercase, 28px, active = `surface-hover` + `--ink`.
 - **Dialogs and menus:** `surface-raised`, hairline, 12px radius, 150ms fade+scale(.98→1).
 - **Toasts and notices** (storage warning, capacity): hairline box, mono prefix `note —`, `--amber` for warnings.
@@ -105,7 +111,7 @@ No shadows in-app. Depth = surface step + hairline (`canvas → surface → surf
 
 ## 8. Motion
 Principle: quick and purposeful, transform and opacity only. Easing `cubic-bezier(.2,.7,.2,1)`; durations 120ms (hover), 200ms (UI), 400–700ms (page-level). Everything respects `prefers-reduced-motion` (disable pulses, split-letter boot, parallax; keep opacity fades).
-- **Boot screen** (first load per session only): `microfish.` rendered as split letters; each letter rises 12px and fades in, 40ms stagger (GSAP), holds ~300ms, then the shell fades up. Skipped on reload within the session and when reduced motion is on. Never blocks interaction for more than ~1.2s.
+- **Boot screen** (first load per session only): the `lookahead.` wordmark rendered glyph by glyph; each rises 12px and fades in, 40ms stagger (GSAP), then the eyes glance ahead, holds ~300ms, then the shell fades up. Skipped on reload within the session and when reduced motion is on. Never blocks interaction for more than ~1.2s.
 - **Empty state:** the welcome title uses a text animation (Vue Bits / Inspira UI, e.g. blur-in or text-reveal) over a subtle animated background (dot grid or aurora, very low contrast, paused when the tab is hidden). Starter prompts are `⮡`-prefixed mono-label cards that stagger in.
 - **Smooth scroll:** Lenis on the message list and sidebar list only. Do not hijack page scroll, and disable under reduced motion.
 - **Messages:** new run blocks fade/translate in 8px (200ms). Streaming demo text never animates per character in the transcript. Text animation stays out of the reading surface.

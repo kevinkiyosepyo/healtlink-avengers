@@ -1,4 +1,4 @@
-# Microfish: hosted ChatGPT connection request
+# lookahead: hosted ChatGPT connection request
 
 Prepared October 3, 2026. Draft only; no registration or interest-form submission has been made.
 
@@ -8,27 +8,27 @@ Use [OpenAI’s Sign in with ChatGPT interest form](https://openai.com/form/sign
 
 | Field | Proposed value |
 | --- | --- |
-| Product | Microfish, a HealthLink hackathon research-planning prototype |
+| Product | lookahead, a HealthLink hackathon research-planning prototype |
 | Website | https://health-link-hackathon.vercel.app |
 | Requested capability | Sign in and ChatGPT plan use for AI requests |
 | Applicant/contact | To be supplied by the applicant |
-| Company/legal entity | Not supplied; Microfish is the current product name |
+| Company/legal entity | Not supplied; lookahead is the current product name |
 | Job title | Not supplied; optional on the form |
 
 ### Product description for the form
 
-Microfish is a hosted research-planning prototype for researchers to explore “what if” scenarios. The website includes an interactive bottleneck timeline that shows tasks, owners, prerequisites, and how delays affect downstream work. Its scenario exploration considers three fictional perspectives: research coordinator, participant, and study operations. The generated analysis is intended to help researchers identify assumptions, possible bottlenecks, and practical next steps; it is not empirical research evidence or a validated prediction.
+lookahead is a hosted research-planning prototype for researchers to explore “what if” scenarios. The website includes an interactive bottleneck timeline that shows tasks, owners, prerequisites, and how delays affect downstream work. Its scenario exploration considers three fictional perspectives: research coordinator, participant, and study operations. The generated analysis is intended to help researchers identify assumptions, possible bottlenecks, and practical next steps; it is not empirical research evidence or a validated prediction.
 
-We want researchers to sign in to Microfish with their Google account and then separately connect ChatGPT, with explicit permission to use their eligible ChatGPT plan for scenario requests. Researchers should not need to create or paste an OpenAI API key. Google identifies the researcher; the ChatGPT connection supplies the requested AI authorization. We are requesting hosted-application access for both the OAuth connection and ChatGPT plan use for AI requests.
+We want researchers to sign in to lookahead with their Google account and then separately connect ChatGPT, with explicit permission to use their eligible ChatGPT plan for scenario requests. Researchers should not need to create or paste an OpenAI API key. Google identifies the researcher; the ChatGPT connection supplies the requested AI authorization. We are requesting hosted-application access for both the OAuth connection and ChatGPT plan use for AI requests.
 
 ## Technical registration details
 
 - Application: a Vue/Vite website with a server-side OAuth handler hosted on Vercel.
 - Production origin: `https://health-link-hackathon.vercel.app`
 - Requested production callback: `https://health-link-hackathon.vercel.app/api/auth/callback/chatgpt`
-- Intended flow: Google sign-in → explicit separate ChatGPT connection → ChatGPT permission/plan selection → return to the same Microfish researcher session → run scenario exploration.
+- Intended flow: Google sign-in → explicit separate ChatGPT connection → ChatGPT permission/plan selection → return to the same lookahead researcher session → run scenario exploration.
 - Intended inference: three perspective requests for each user-submitted scenario, using eligible models and the hosted contract approved by OpenAI.
-- Requested client: Microfish’s own hosted OAuth client, with the registered token-endpoint authentication method and any required confidential-client secret supplied securely by OpenAI.
+- Requested client: lookahead’s own hosted OAuth client, with the registered token-endpoint authentication method and any required confidential-client secret supplied securely by OpenAI.
 
 Please confirm the approved plan-use scopes/resource, model catalog, inference and streaming requirements, refresh/revocation contract, and applicable usage-limit behavior for this hosted client. Identity approval alone would not meet the requested simulation capability.
 

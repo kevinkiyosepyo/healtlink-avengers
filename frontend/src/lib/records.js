@@ -55,7 +55,7 @@ export async function createRecord({ runId, sessionId, sessionTitle, prompt, mod
 
 /** Fingerprinted envelope for tool exports (preflight reports, timeline scenarios). */
 export async function createArtifact(kind, data, createdAt = new Date().toISOString()) {
-  const body = { schemaVersion: RECORD_SCHEMA_VERSION, kind, createdAt, app: "microfish", data };
+  const body = { schemaVersion: RECORD_SCHEMA_VERSION, kind, createdAt, app: "lookahead", data };
   return { ...body, fingerprint: await sha256(canonicalJson(body)) };
 }
 

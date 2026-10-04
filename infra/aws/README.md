@@ -1,4 +1,4 @@
-# Deploying microfish to AWS
+# Deploying lookahead to AWS
 
 One container (see `Dockerfile`) serves the frontend, Google sign-in and the opt-in cloud backup API. `template.yaml` creates:
 
@@ -15,9 +15,9 @@ The researcher's OpenAI key is **not** part of the cloud setup. It still goes br
 
 1. **Secrets** (once):
    ```sh
-   aws secretsmanager create-secret --name microfish/auth-secret --secret-string "$(openssl rand -base64 32)"
-   aws secretsmanager create-secret --name microfish/google-id --secret-string "<client id>"
-   aws secretsmanager create-secret --name microfish/google-secret --secret-string "<client secret>"
+   aws secretsmanager create-secret --name lookahead/auth-secret --secret-string "$(openssl rand -base64 32)"
+   aws secretsmanager create-secret --name lookahead/google-id --secret-string "<client id>"
+   aws secretsmanager create-secret --name lookahead/google-secret --secret-string "<client secret>"
    ```
    Note the three ARNs. Type the Google values yourself; don't paste them into chats or commits.
 2. **Deploy** (Docker running, AWS CLI logged in):

@@ -8,7 +8,7 @@ description: Use when the user asks for a Devpost / hackathon submission, projec
 Write from evidence, not hype. Every claim must be traceable to code, commits, or the user.
 
 1. **Gather.** Read `README.md`, `DESIGN.md`, `DEMO.md` if present, `package.json` deps, and `git log --oneline` for the whole project. Skim the main components to see what is real versus mocked.
-2. **Be honest about the demo.** If parts are simulated or illustrative (microfish runs are local demos; the graph is an illustrative topology), say so plainly. Judges punish overclaiming more than they punish scope.
+2. **Be honest about the demo.** If parts are simulated or illustrative (lookahead runs are local demos; the graph is an illustrative topology), say so plainly. Judges punish overclaiming more than they punish scope.
 3. **Draft `SUBMISSION.md`** with these sections, each 2–5 tight sentences or bullets:
    - **Tagline**: one line, under 60 chars
    - **Inspiration**: the real problem and who it hurts

@@ -93,7 +93,7 @@ export function createApiHandler({ env = process.env, fetchImpl = globalThis.fet
       if (pathname.startsWith("/api/auth/") || pathname === "/api/auth") {
         requireMethod(request, ["GET", "POST"]);
         if (request.method === "POST") requireSameOrigin(request, config);
-        if (/\/(signin|callback)\/chatgpt$/.test(pathname) && !config.chatgpt) throw new HttpError(503, "chatgpt_not_configured", "ChatGPT sign-in is awaiting OpenAI approval and setup for Microfish.");
+        if (/\/(signin|callback)\/chatgpt$/.test(pathname) && !config.chatgpt) throw new HttpError(503, "chatgpt_not_configured", "ChatGPT sign-in is awaiting OpenAI approval and setup for lookahead.");
         return await handleAuth(request, config);
       }
       if (pathname === "/api/sync" || pathname.startsWith("/api/sync/")) {
