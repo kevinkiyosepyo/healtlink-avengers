@@ -1,5 +1,7 @@
 # Lookahead
 
+DEMO LINK: https://health-link-hackathon.vercel.app/
+
 Lookahead helps researchers prepare a study, inspect its dependencies, and explore possible reviewer questions. The login page leads with **Predict the Future**; the outputs are planning scenarios, not validated forecasts or institutional decisions.
 
 One workspace serves both light and dark appearances. Theme changes preserve navigation, chats, drafts, provider connections, and active runs. The older `/research.html` link opens this same app. A brief, dismissible 1.35-second introduction appears once per browser session and respects reduced motion.
