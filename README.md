@@ -19,7 +19,7 @@ One workspace serves both light and dark appearances. Theme changes preserve nav
 
 ## Run and verify
 
-Use Node.js 22 or later.
+Use Node.js 22 or later. On Windows, `winget install OpenJS.NodeJS.LTS` installs a compatible version.
 
 ```sh
 npm run install:all
